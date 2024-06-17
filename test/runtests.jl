@@ -4,6 +4,7 @@ using XAMAuxData: SAM, BAM, AuxTag, Hex
 using Test
 using MemViews: MemView
 using FormatSpecimens
+using StringViews: StringView
 
 @testset "SAM" begin
 
@@ -68,6 +69,64 @@ end
     mem = Memory{UInt8}(undef, length(cu))
     copyto!(mem, 1, mv, 1, length(mv))
     @test mem == cu == mv
+
+    # Test encoding of various different types
+
+    @testset "Integers" begin
+        aux = SAM.Auxiliary(rand(UInt8, 19), 20)
+        for i in Any[
+            UInt8(55),
+            Int8(12),
+            UInt16(22),
+            Int16(-99),
+            UInt32(3444251),
+            Int32(43094234),
+            UInt64(21345353),
+            Int64(231435511),
+            UInt128(34311),
+            Int128(-391239931),
+            BigInt(2033843841),
+        ]
+            empty!(aux)
+            aux["AB"] = i
+            @test String(MemView(aux)) == "AB:i:" * string(i)
+            @test aux["AB"] === Int(i)
+        end
+    end
+
+    @testset "Floats" begin
+        aux = SAM.Auxiliary(rand(UInt8, 19), 20)
+        aux["xa"] = "some string!  "
+        for i in Any[
+            Float16(19.9),
+            Float32(-2034.22342),
+            Float64(-5.353e-11),
+            BigFloat("231.23234e22"),
+            pi,
+        ]
+            aux["FL"] = i
+            @test String(MemView(aux)) == "xa:Z:some string!  \tFL:f:" * string(Float32(i))
+            @test aux["FL"] === Float32(i)
+        end
+    end
+
+    @testset "Strings" begin
+        aux = SAM.Auxiliary(rand(UInt8, 4), 5)
+        for (n,i) in enumerate(Any[
+            "some content",
+            view("another content", 2:10),
+            Test.GenericString("content"),
+            StringView(collect(codeunits("lkwjdlkd"))),
+        ])
+            aux["S" * string(n)] = i
+            @test String(MemView(aux)) == "S" * string(n) * ":Z:" * String(i)
+            @test aux["S" * string(n)] == i
+            delete!(aux, "S" * string(n))
+        end
+    end
+
+    # Chars TODO
+    # Arrays TODO
 end
 
 @testset "Existing good files" begin
@@ -169,6 +228,9 @@ end
         @test aux[k] === v
     end
 end
+
+# TODO Add the encoding of different types testsets here like SAM
+# Writing to a file TODO
 
 end
 

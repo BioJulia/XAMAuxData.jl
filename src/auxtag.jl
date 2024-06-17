@@ -20,7 +20,7 @@ end
 Base.isless(x::AuxTag, y::AuxTag) = isless(x.x, y.x)
 Base.isequal(x::AuxTag, y::Union{String, SubString{String}}) = x == try_auxtag(y)
 
-AuxTag(x) = @something try_auxtag(x) error("Tags must conform to r\"[A-Za-z][A-Za-z0-9]")
+AuxTag(x) = @something try_auxtag(x) error("Tags must conform to r\"^[A-Za-z][A-Za-z0-9]\$\"")
 
 # Per BAM specs, tags must conform to #[A-Za-z][A-Za-z0-9]
 function is_valid_auxtag(x::UInt8, y::UInt8)

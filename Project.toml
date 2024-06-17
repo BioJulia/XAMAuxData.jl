@@ -4,7 +4,6 @@ authors = ["Jakob Nybo Nissen <jakobnybonissen@gmail.com>"]
 version = "0.1.0"
 
 [deps]
-FormatSpecimens = "3372ea36-2a1a-11e9-3eb7-996970b6ffbd"
 MemViews = "a791c907-b98b-4e44-8f4d-e4c2362c6b2f"
 StringViews = "354b36f9-a18e-4713-926e-db85100087ba"
 

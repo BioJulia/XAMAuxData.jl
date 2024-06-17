@@ -7,7 +7,7 @@ import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!
 
 public Auxiliary, AuxTag
 
-using MemViews: ImmutableMemView, MutableMemView, MemView, offset
+using MemViews: ImmutableMemView, MutableMemView, MemView
 using StringViews: StringView
 
 struct Auxiliary{T} <: AbstractAuxiliary
@@ -28,12 +28,14 @@ end
 
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 
-MemView(x::Auxiliary) = @inbounds offset(MemView(x.x), x.start - 1)
+MemView(x::Auxiliary) = @inbounds MemView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
     x
 end
+
+Base.isempty(x::Auxiliary) = x.start > length(x.x)
 
 function Base.iterate(aux::Auxiliary, state::Int=1)
     it = iter_encodings(aux)
@@ -125,12 +127,8 @@ function load_array(mem::ImmutableMemView{UInt8})
 end
 
 function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemView{UInt8})
-    @assert length(mem) == n_elements * sizeof(T)
-    res = Memory{T}(undef, n_elements % Int)
-    iszero(n_elements) && return res
-    GC.@preserve mem res begin
-        unsafe_copyto!(pointer(res), Ptr{T}(pointer(mem)), n_elements)
-    end
+    res = reinterpret(T, mem)
+    length(res) == n_elements || return Errors.InvalidArray
     res
 end
 

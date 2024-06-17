@@ -9,7 +9,7 @@ import ..iter_encodings, ..AbstractEncodedIterator
 
 public Auxiliary, AuxTag
 
-using MemViews: offset, MemView, ImmutableMemView
+using MemViews: MemView, ImmutableMemView
 using StringViews: StringView
 
 struct EncodedIterator <: AbstractEncodedIterator
@@ -63,12 +63,14 @@ function iter_encodings(aux::Auxiliary)
     EncodedIterator(DelimitedIterator(ImmutableMemView(aux), UInt8('\t')))
 end
 
-MemView(x::Auxiliary) = @inbounds offset(MemView(x.x), x.start - 1)
+MemView(x::Auxiliary) = @inbounds MemView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
     x
 end
+
+Base.isempty(x::Auxiliary) = x.start > length(x.x)
 
 function Base.iterate(aux::Auxiliary, state::Int=1)
     it = iter_encodings(aux)
@@ -143,11 +145,12 @@ function setindex_nonexisting!(aux::MutableAuxiliary, val, key::AuxTag)
     v = as_sam_aux_value(val)
     type_tag = get_type_tag(typeof(v))
     value_bytes = as_serialized_bytes(v)
+    write_tab = !isempty(aux)
     oldlen = length(aux.x)
-    resize!(aux.x, oldlen + 5 + !iszero(oldlen) + length(value_bytes))
+    resize!(aux.x, oldlen + 5 + write_tab + length(value_bytes))
     data = aux.x
     @inbounds begin
-        if !iszero(oldlen)
+        if write_tab
             data[oldlen + 1] = UInt8('\t')
             oldlen += 1
         end
@@ -192,14 +195,20 @@ function Base.delete!(aux::MutableAuxiliary, k)
         if tag == key
             # Delete also an adjecent tab if it's not the only element
             # And the leading 5 bytes e.g. "AB:i:"
+            offset = aux.start - 1
+            start_delete = first(span) - 5 + offset
+            stop_delete = last(span) + offset
             to_delete = if first(span) == 6
-                if last(span) == lastindex(aux.x)
-                    (first(span) - 5):last(span)
+                if last(span) + offset == lastindex(aux.x)
+                    # If sole element, delete no tabs (because there are none)
+                    start_delete:stop_delete
                 else
-                    (first(span) - 5):(last(span) + 1)
+                    # Otherwise, if first element, delete trailing tab
+                    start_delete:stop_delete + 1
                 end
             else
-                (first(span) - 6):last(span)
+                # Otherwise, delete leading tab
+                start_delete-1:stop_delete
             end
             deleteat!(aux.x, to_delete)
             break

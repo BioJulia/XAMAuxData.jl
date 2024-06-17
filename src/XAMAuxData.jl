@@ -73,7 +73,7 @@ function as_aux_value end
 as_sam_aux_value(x) = as_aux_value(x)
 as_bam_aux_value(x) = as_aux_value(x)
 
-as_aux_value(x::AbstractFloat) = Float32(x)::Float32
+as_aux_value(x::Real) = Float32(x)::Float32
 
 function as_aux_value(x::AbstractChar)
     c = Char(x)::Char
