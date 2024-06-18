@@ -227,10 +227,36 @@ aux["AB"] = Hex(UInt8[0x01, 0x02])
 println(String(MemView(aux)))
 
 # output
-AB:B:C1,2
+AB:B:C,1,2
 AB:H:0102
 ```
 
 ## Low-level interface
 
 ## Writing `Auxiliary`s to files
+Calling `MemView` on an `Auxiliary` will return a view of the underlying data.
+This data is guaranteed to be valid SAM/BAM auxiliary data:
+
+```jldoctest
+(field1, field2) = ("PG:A:n", "ca:i:-241")
+aux = SAM.Auxiliary(field1 * '\t' * field2)
+
+# Get a view of the data underlying `aux`.
+# This is guaranteed to be valid SAM data (and likewise for BAM)
+using MemViews
+mem = MemView(aux)
+
+# We make no guarantees about which order the two fields are,
+# but we DO guarantee the memory is a valid SAM aux data
+# with these two fields
+println(
+  in(
+    String(mem),
+    (field1 * '\t' * field2, field2 * '\t' * field1)
+  )
+)
+
+# output
+true
+
+```

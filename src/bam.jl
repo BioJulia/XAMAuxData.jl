@@ -177,7 +177,8 @@ function Base.delete!(aux::MutableAuxiliary, k)
         v isa Error && error("Bad AuxTag") # TODO
         (tag, _, span) = v
         if tag == key
-            deleteat!(aux.x, first(span)-3:last(span))
+            offset = aux.start - 1
+            deleteat!(aux.x, first(span)-3+offset:last(span)+offset)
             break
         end
     end

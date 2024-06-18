@@ -13,6 +13,9 @@ export Hex, AuxTag, SAM, BAM
 * Needs to narrow it down to a few concrete types
 * Remove ByteString
 
+# TODO: What about GFA? Maybe make a new module which uses
+functions from SAM, and maybe even forwards some methods.
+
 TODO:
 Review use of errors. I.e. they must be used consistently.
 Maybe InvalidAuxTag is one error and InvalidAuxHeader is another. These are the only ones that
@@ -36,8 +39,14 @@ type tag `B`).
 """
 struct Hex{V <: AbstractVector{UInt8}}
     x::V
+
+    function Hex(v::AbstractVector{UInt8})
+        isempty(v) && error("Hex values cannot be empty according to SAM specs")
+        new{typeof(v)}(v)
+    end
 end
 
+# Must encode to uppercase A-F
 hexencode_nibble(u::UInt8)::UInt8 = u < 0x0a ? UInt8('0') + u : UInt8('A') - 0x0a + u
 
 function hexencode!(mem::MutableMemView, hex::Hex)
@@ -46,7 +55,7 @@ function hexencode!(mem::MutableMemView, hex::Hex)
         mem[2 * byte_no] = hexencode_nibble(byte & 0x0f)
     end
     mem
-end    
+end
 
 # These are the type tags use to determine the value of the serialized data
 # the input type must already be known to be appropriate for the given format,
@@ -98,11 +107,10 @@ function as_aux_value(v::AbstractVector{<:Real})
     mem
 end
 
-function is_printable(mem::ImmutableMemView{UInt8})
+function is_printable(v::AbstractVector{UInt8})
     res = true
-    @inbounds for i in eachindex(mem)
-        b = mem[i]
-        res &= (b == UInt8(' ')) | is_printable_char(mem[i])
+    for b in v
+        res &= (b == UInt8(' ')) | is_printable_char(b)
     end
     res
 end
@@ -208,8 +216,10 @@ Base.eltype(::Type{AbstractEncodedIterator}) = Union{Error, Tuple{AuxTag, UInt8,
 
 function load_hex(mem::ImmutableMemView)::Union{Memory{UInt8}, Error}
     len = length(mem)
+    # Note: According to specs, Hex can't be empty, but we load it anyway
+    # because we should be generous in what we accept
     isodd(len) && return Errors.InvalidHex
-    reslen = div(len, 2)
+    reslen = div(len % UInt, 2) % Int
     hex = Memory{UInt8}(undef, reslen)
     @inbounds for i in 1:reslen
         a = pack_hex(mem[2i - 1])
@@ -256,7 +266,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)
             # TODO: Content length limitation doesn't actually work
             println(content, "  \"", string(key), "\" => ", repr(value))
         end
-        write(io, take!(buf)[1:end-1]) # trailing newline
+        write(io, take!(buf)[1:end-1]) # remove trailing newline
     else
         print(io, "Invalid ", typeof(x))
     end

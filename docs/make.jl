@@ -17,8 +17,6 @@ makedocs(
     modules = [XAMAuxData],
     pages = [
         "Home" => "index.md",
-        "SAM aux" => "sam.md",
-        "BAM aux" => "bam.md",
     ],
     authors = "Jakob Nybo Nissen",
     checkdocs = :public,
