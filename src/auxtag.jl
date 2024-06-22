@@ -7,6 +7,19 @@ The type of a key of `Auxiliary`. This type is lightweight, and validates
 that the key is of appropriate format.
 `Auxiliary` can also be modified using strings as keys, which will be converted
 to `AuxTag`, but this may cause a needless allocation of the string.
+
+# Examples
+```jldoctest
+julia> AuxTag("AC")
+AuxTag("AC")
+
+julia> AuxTag('k', 'w')
+AuxTag("kw")
+
+julia> AuxTag("1C") # invalid tag
+ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]\$".
+[...]
+```
 """
 struct AuxTag
     x::Tuple{UInt8, UInt8}
@@ -20,7 +33,8 @@ end
 Base.isless(x::AuxTag, y::AuxTag) = isless(x.x, y.x)
 Base.isequal(x::AuxTag, y::Union{String, SubString{String}}) = x == try_auxtag(y)
 
-AuxTag(x) = @something try_auxtag(x) error("Tags must conform to r\"^[A-Za-z][A-Za-z0-9]\$\"")
+AuxTag(x) = @something try_auxtag(x) throw(AuxException(Errors.InvalidAuxTag))
+AuxTag(a, b) = @something try_auxtag(a, b) throw(AuxException(Errors.InvalidAuxTag))
 
 # Per BAM specs, tags must conform to #[A-Za-z][A-Za-z0-9]
 function is_valid_auxtag(x::UInt8, y::UInt8)
@@ -34,7 +48,6 @@ function try_auxtag(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
     is_valid_auxtag(a, b) ? AuxTag(unsafe, a, b) : nothing
 end
 
-# TODO: Test this function with some ASCII if Char encoding changes
 unsafe_u8(c::Char) = (reinterpret(UInt32, c) >> 24) % UInt8
 
 # Convert a char to the corresponding UInt8 if ASCII, else to 0xff

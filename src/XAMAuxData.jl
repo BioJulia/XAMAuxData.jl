@@ -1,28 +1,16 @@
 module XAMAuxData
 
-using MemViews: MemView, MutableMemView, ImmutableMemView
+using MemViews: MemViews, MemView, MutableMemView, ImmutableMemView
 using StringViews: StringView
 
 struct Unsafe end
 const unsafe = Unsafe()
 
 export Hex, AuxTag, SAM, BAM
-
-#=
-TODO:
-Review use of errors. I.e. they must be used consistently.
-Maybe InvalidAuxTag is one error and InvalidAuxHeader is another. These are the only ones that
-can be emitted from iterating encodings.
-
-# TODO: What about GFA? Maybe make a new module which uses
-functions from SAM, and maybe even forwards some methods.
-=#
+public Errors, Error
 
 # These are the numerical types supported by the BAM format.
 const AUX_NUMBER_TYPES = Union{Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32}
-
-# TODO: Replace with trait
-const ByteString = Union{String, SubString{String}, StringView{ImmutableMemView{UInt8}}}
 
 include("auxtag.jl")
 
@@ -32,6 +20,22 @@ include("auxtag.jl")
 Wrapper type around a byte vector. When this type is assigned to an Auxiliary,
 it is encoded as a hex value (type tag `H`) as opposed to a raw byte array (
 type tag `B`).
+
+```jldoctest
+julia> aux = SAM.Auxiliary(UInt8[], 1);
+
+julia> aux["AB"] = Hex([0xae, 0xf8, 0x6c]);
+
+julia> String(MemView(aux))
+"AB:H:AEF86C"
+
+julia> aux = BAM.Auxiliary(UInt8[], 1);
+
+julia> aux["AB"] = Hex([0xae, 0xf8, 0x6c]);
+
+julia> String(MemView(aux))
+"ABHAEF86C\\0"
+```
 """
 struct Hex{V <: AbstractVector{UInt8}}
     x::V
@@ -84,21 +88,29 @@ as_aux_value(x::Real) = Float32(x)::Float32
 
 function as_aux_value(x::AbstractChar)::Union{Char, Error}
     c = Char(x)::Char
-    isascii(c) ? c : error("AUX chars must be in '!':'~'")
+    isascii(c) ? c : throw(AuxException(Errors.InvalidChar))
 end
 
 as_aux_value(x::Hex) = x
-as_aux_value(s::AbstractString)::ByteString = as_aux_value(String(s))
 
-function as_aux_value(
-    s::Union{String, SubString{String}, StringView{ImmutableMemView{UInt8}}}
-)::Union{ByteString, Error}
-    mem = ImmutableMemView(codeunits(s))
-    if is_printable(mem)
+function as_aux_value(s::AbstractString)
+    cu = codeunits(s)
+    auxs = if MemViews.MemKind(typeof(cu)) isa MemViews.IsMemory
         s
     else
-        error("AUX string can only contain chars in [ !-~]")
+        String(s)
     end
+    # Take view of codeunits, because StringViews' codeunits return
+    # the underlying array, so this makes it work for StringViews,
+    # without having to implement MemView(::StringView), which would
+    # be piracy in this package.
+    mem = ImmutableMemView(codeunits(auxs))
+    if is_printable(mem)
+        auxs
+    else
+        throw(AuxException(Errors.InvalidString))
+    end
+    auxs
 end
 
 # Returns an AbstractVector{<:AUX_NUMBER_TYPES}
@@ -131,6 +143,38 @@ function (T::Type{<:AbstractAuxiliary})(itr)
     y
 end
 
+"""
+    isvalid(aux::Auxiliary) -> Bool
+
+Check if the keys of `aux` are valid. Valid `aux` can be iterated
+and accessed without throwing an exception.
+Invalid `aux` has at least one key/value pair which will error when
+accessed.
+This function does _not_ validate if the values of `aux` are well-formatted,
+a valid `Auxiliary` may return an `Errors.Error` when accessed.
+To check if all values of `aux` is valid, use
+`isvalid(aux) && all(i -> !isa(i, SAM.Error), values(aux))`.
+
+# Examples
+```jldoctest
+julia> aux = BAM.Auxiliary("KLZab\t\\0ABCF");
+
+julia> isvalid(aux)
+true
+
+julia> aux["KL"] == Errors.InvalidString
+true
+
+julia> aux = BAM.Auxiliary("KLZab\tABCF");
+
+julia> isvalid(aux)
+false
+
+julia> aux["KL"]
+ERROR: BAM string or Hex type not terminated by null byte
+[...]
+```
+"""
 function Base.isvalid(aux::AbstractAuxiliary)
     all(i -> !isa(i, Error), iter_encodings(aux))
 end
@@ -166,7 +210,7 @@ end
 function Base.keys(aux::AbstractAuxiliary)
     Iterators.map(iter_encodings(aux)) do val
         if val isa Error
-            error("Bad AuxTag")
+            throw(AuxException(Errors.InvalidAuxTag))
         else
             first(val)
         end
@@ -187,12 +231,30 @@ const ELTYPE_DICT = Dict(
 
 is_printable_char(x::UInt8) = in(x, UInt8('!'):UInt8('~'))
 
+"""
+    Errors
+
+Module containing the error values of XAMAuxData.
+The errors are _nonexhausitve_ - more might be added in a non-breaking release.
+
+The following errors may contained in `AbstractAuxiliary` instead of the real
+value:
+* `InvalidTypeTag` (SAM only): An aux value with an unknown type
+* `InvalidArrayEltype` (SAM only): A `B` value with an unknown element type
+* `InvalidInt` (SAM only): An integer that can't be parsed to an `Int32`
+* `InvalidFloat` (SAM only): A float that can't be parsed to a `Float32`
+* `InvalidChar`: Loading a `Char` not in `'!':'~'`
+* `InvalidString`: A string that contains a character not in `re"[ !-~]"`
+* `InvalidHex`: a `H` value with an odd number of symbols, or symbol not in `re"[0-9A-F]"`
+* `InvalidArray`: A malformed `B` value
+"""
 module Errors
 
+# See the related showerror method for descriptions of these values
 @enum Error::Int32 begin
     # These four can be emitted from the EncodedIterator
-    TooShortMemory # too short memory for any data, or for data type specifically for BAM
-    InvalidAuxTag # Tags must conform to r\"[A-Za-z][A-Za-z0-9]
+    TooShortMemory
+    InvalidAuxTag
     NoColons # not AB:C:x, SAM only
     NoNullByte # BAM only
 
@@ -202,7 +264,7 @@ module Errors
     InvalidArrayEltype
 
     # Only emitted when loading the value
-    InvalidChar # not printable
+    InvalidChar
     InvalidInt # SAM only
     InvalidFloat # SAM only
     InvalidString
@@ -213,6 +275,42 @@ end
 end # module errors
 
 using .Errors: Errors, Error
+
+struct AuxException <: Exception
+    error::Error
+end
+
+function Base.showerror(io::IO, error::AuxException)
+    inner = error.error
+    s = if inner == Errors.TooShortMemory
+        "Not enough bytes available in Aux data to encode a minimal field."
+    elseif inner == Errors.InvalidAuxTag
+        "Invalid AuxTag. Tags must conform to r\"^[A-Za-z][A-Za-z0-9]\$\"."
+    elseif inner == Errors.NoColons
+        "Invalid SAM tag header. Expected <AuxTag>:<type tag>:, but found no colons."
+    elseif inner == Errors.NoNullByte
+        "BAM string or Hex type not terminated by null byte"
+    elseif inner == Errors.InvalidTypeTag
+        "Unknown type tag in aux value."
+    elseif inner == Errors.InvalidArrayEltype
+        "Invalid array element type tag. Valid values are CcSsIif."
+    elseif inner == Errors.InvalidChar
+        "Auxiliary Char (type 'A') must be in '!':'~'."
+    elseif inner == Errors.InvalidInt
+        "Data in SAM Auxiliary cannot be parsed as base-ten Int32."
+    elseif inner == Errors.InvalidFloat
+        "Data in SAM Auxiliary cannot be parsed as Float32."
+    elseif inner == Errors.InvalidString
+        "Auxiliary String (type 'Z') can only contain bytes in re\"[ !-~]\"."
+    elseif inner == Errors.InvalidArray
+        "Invalid array value. Not enough bytes available, or could not parse data to array element type."
+    elseif inner == Errors.InvalidHex
+        "Auxiliary Hex (type 'H') contains data not parsable as hexidecimal bytes."
+    else
+        @assert false # unreachable
+    end
+    print(io, s)
+end
 
 abstract type AbstractEncodedIterator end
 function iter_encodings end

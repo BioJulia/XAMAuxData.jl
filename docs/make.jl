@@ -1,7 +1,8 @@
 using Documenter, XAMAuxData
 
 meta = quote
-    using XAMAuxData: SAM, BAM
+    using XAMAuxData: SAM, BAM, AuxTag, Hex, Errors
+    using MemViews: MemView
     line = "AK:z:some string\ts1:i:2512\tst:A:+\tas:f:211.2\tar:B:c3,-16,21,-100"
 end
 
@@ -20,7 +21,12 @@ makedocs(
     ],
     authors = "Jakob Nybo Nissen",
     checkdocs = :public,
-    remotes=nothing, # TODO: Remove
+    remotes=nothing,
 )
 
-# TODO: Call deploydocs
+deploydocs(
+    repo = "github.com/BioJulia/XAMAuxData.jl.git",
+    push_preview = true,
+    deps = nothing,
+    make = nothing,
+)

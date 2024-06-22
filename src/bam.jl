@@ -1,11 +1,11 @@
 module BAM
 
 import ..AuxTag, ..AbstractAuxiliary, ..Hex
-import ..ByteString, ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
+import ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..ELTYPE_DICT, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
-import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!
+import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
 
-public Auxiliary, AuxTag
+public Auxiliary, AuxTag, Error, Errors
 
 using MemViews: ImmutableMemView, MutableMemView, MemView
 using StringViews: StringView
@@ -42,7 +42,7 @@ function Base.iterate(aux::Auxiliary, state::Int=1)
     itval = iterate(it, state)
     itval === nothing && return nothing
     (val, new_state) = itval
-    val isa Error && error("Bad AuxTag") # TODO: Wrap Error in a proper struct with showerror method
+    val isa Error && throw(AuxException(val))
     (key, typetag, span) = val
     value = load_auxvalue(typetag, @inbounds it.mem[span])
     value isa Error && return (value, new_state)
@@ -128,6 +128,8 @@ end
 
 function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemView{UInt8})
     res = reinterpret(T, mem)
+    # Should not be possible, since the number of elements is used to determine
+    # the memory size
     length(res) == n_elements || return Errors.InvalidArray
     res
 end
@@ -174,7 +176,7 @@ end
 function Base.delete!(aux::MutableAuxiliary, k)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
-        v isa Error && error("Bad AuxTag") # TODO
+        v isa Error && throw(AuxException(Errors.InvalidAuxTag))
         (tag, _, span) = v
         if tag == key
             offset = aux.start - 1
@@ -189,7 +191,7 @@ bytes_needed(x::Union{Int8, UInt8, Char}) = 1
 bytes_needed(x::Union{Int16, UInt16}) = 2
 bytes_needed(x::Union{Int32, UInt32, Float32}) = 4
 
-bytes_needed(x::ByteString) = ncodeunits(x) + 1 # null byte at end
+bytes_needed(x::AbstractString) = length(MemView(codeunits(x))) + 1 # null byte
 bytes_needed(x::Hex) = 2 * length(x.x) + 1 # null byte
 
 function bytes_needed(x::AbstractVector{<:AUX_NUMBER_TYPES})
@@ -260,7 +262,7 @@ function write_auxvalue_typetag!(mem::MutableMemView{UInt8}, bam_val)
             elseif type_tag in (UInt8('i'), UInt8('I'), UInt8('f'))
                 unsafe_store!(Ptr{UInt32}(ptr), htol(reinterpret(UInt32, bam_val)))
             elseif type_tag == UInt8('Z')
-                unsafe_copyto!(mem[2:end], ImmutableMemView(bam_val))
+                unsafe_copyto!(mem[2:end], ImmutableMemView(codeunits(bam_val)))
                 @inbounds mem[end] = 0x00
             elseif type_tag == UInt8('H')
                 m = @inbounds mem[2:end-1]
@@ -286,7 +288,7 @@ function Base.get(aux::Auxiliary, k, default)
     key = AuxTag(k)
     it = iter_encodings(aux)
     for i in it
-        i isa Error && error("Bad AuxTag") # TODO
+        i isa Error && throw(AuxException(i))
         (auxtag, typetag, span) = i
         if auxtag == key
             return load_auxvalue(typetag, @inbounds it.mem[span])

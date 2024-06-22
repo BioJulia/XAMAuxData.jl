@@ -1,6 +1,6 @@
 module XAMAuxDataTests
 
-using XAMAuxData: SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors
+using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors
 using Test
 using MemViews: MemView
 using FormatSpecimens
@@ -23,6 +23,16 @@ INT_TYPE_TO_CHAR = Dict(
         b"cdg",
         b"",
     ]
+end
+
+# This method relies on Base internals that are very unlikely to change,
+# but we should test it nonetheless
+@testset "Unsafe u8" begin
+    @test all(XAMAuxData.unsafe_u8(c) == UInt8(c) for c in '\0':'\x7f')
+end
+
+@testset "AuxTag" begin
+    @test AuxTag("ac") == AuxTag('a', 'c') == AuxTag(0x61, 0x63)
 end
 
 @testset "SAM" begin

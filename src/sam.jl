@@ -1,3 +1,10 @@
+"""
+    SAM
+
+Submodule of `XAMAuxData` with functionality for reading an writing SAM
+auxiliary data.
+See the public and exported names in this module for its API.
+"""
 module SAM
 
 # Default Julia methods throw with bad keys, but not bad values (which are simply an error value)
@@ -5,9 +12,9 @@ module SAM
 import ..AuxTag, ..AbstractAuxiliary, ..ELTYPE_DICT, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
 import ..DelimitedIterator, ..get_type_tag, ..Error, ..Errors, ..load_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
-import ..iter_encodings, ..AbstractEncodedIterator
+import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException
 
-public Auxiliary, AuxTag
+public Auxiliary, AuxTag, Hex, Errors, Error
 
 using MemViews: MemView, ImmutableMemView
 using StringViews: StringView
@@ -39,8 +46,38 @@ function parse_encoded_aux(
     (tag, eltype, 6:lastindex(mem))
 end
 
+"""
+    SAM.Auxiliary{T <: AbstractVector{UInt8}} <: AbstractDict{AuxTag, Any}
 
-struct Auxiliary{T} <: AbstractAuxiliary{T}
+Lazily loaded `AbstractDict` representing the auxiliary data fields of a SAM
+record. Immutable aux's can be constructed with `Auxiliary(x)` for any `x`
+with `MemView(x)` defined.
+Mutable aux data is constructed with `Auxiliary(x::Vector{UInt8}, start::Int)`,
+where `start` gives the first index of the used data in `x` - all data before
+`start` will be ignored and never modified.
+
+# Examples
+```jldoctest
+julia> immut = SAM.Auxiliary("KJ:i:-1\tAB:Z:abc");
+
+julia> immut["KJ"]
+-1
+
+julia> haskey(immut, "AB")
+true
+```
+
+# Extended help
+Since `Auxiliary` is lazily loaded, it may contain invalid data. Entries not
+formatted as `AB:X:Z` for valid `AuxTag` AB, any `X` and any sequence of bytes
+`Z` will throw an error when accessed.
+If `Z` is invalid, a value of [`Errors.Error`](@ref) will be returned when
+accessed.
+The function [`isvalid`](@ref)
+
+# Examples
+"""
+struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     x::T
     start::Int
 
@@ -77,7 +114,7 @@ function Base.iterate(aux::Auxiliary, state::Int=1)
     itval = iterate(it, state)
     itval === nothing && return nothing
     (val, new_state) = itval
-    val isa Error && error("Bad AuxTag") # TODO: Wrap Error in a proper struct with showerror method
+    val isa Error && throw(AuxException(Errors.InvalidAuxTag))
     (key, typetag, span) = val
     value = load_auxvalue(typetag, @inbounds it.x.v[span])
     (key => value, new_state)
@@ -87,7 +124,7 @@ function Base.get(aux::Auxiliary, k, default)
     key = AuxTag(k)
     it = iter_encodings(aux)
     for i in it
-        i isa Error && error("Bad AuxTag") # TODO
+        i isa Error && throw(AuxException(Errors.InvalidAuxTag))
         (auxtag, typetag, span) = i
         if auxtag == key
             return load_auxvalue(typetag, @inbounds it.x.v[span])
@@ -192,7 +229,7 @@ end
 function Base.delete!(aux::MutableAuxiliary, k)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
-        v isa Error && error("Bad AuxTag") # TODO
+        v isa Error && throw(AuxException(Errors.InvalidAuxTag))
         (tag, _, span) = v
         if tag == key
             # Delete also an adjecent tab if it's not the only element

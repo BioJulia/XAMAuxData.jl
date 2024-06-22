@@ -1,7 +1,8 @@
 ```@meta
 CurrentModule = XAMAuxData
 DocTestSetup = quote
-    using XAMAuxData: BAM, SAM, AuxTag, Hex
+    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors
+    using MemViews: MemView
 end
 ```
 
@@ -59,7 +60,7 @@ Attempting to construct an invalid `AuxTag` will error:
 AuxTag("11")
 
 # output
-ERROR: Tags must conform to r"^[A-Za-z][A-Za-z0-9]$"
+ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]$".
 [...]
 ```
 

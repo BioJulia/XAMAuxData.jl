@@ -1,3 +1,9 @@
+"""
+    DelimitedIterator(data, x::T)
+
+Return an iterator over memory-backed data `data` of eltype `T`.
+Returns `MemView`s of the same elements as `data`, split by `x`.
+"""
 struct DelimitedIterator{T}
     v::ImmutableMemView{T}
     d::T

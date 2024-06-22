@@ -9,7 +9,7 @@ StringViews = "354b36f9-a18e-4713-926e-db85100087ba"
 
 [compat]
 FormatSpecimens = "1.1.0"
-MemViews = "0.1"
+MemViews = "0.2"
 StringViews = "1.3.3"
 
 [extras]
