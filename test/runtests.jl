@@ -1,6 +1,6 @@
 module XAMAuxDataTests
 
-using XAMAuxData: SAM, BAM, AuxTag, Hex
+using XAMAuxData: SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors
 using Test
 using MemViews: MemView
 using FormatSpecimens
@@ -14,6 +14,16 @@ INT_TYPE_TO_CHAR = Dict(
     UInt32 => 'I',
     Int32 => 'i'
 )
+
+@testset "DelimitedIterator" begin
+    it = DelimitedIterator("abceacdga", UInt8('a'))
+    @test collect(it) == [
+        b"",
+        b"bce",
+        b"cdg",
+        b"",
+    ]
+end
 
 @testset "SAM" begin
 
@@ -32,6 +42,9 @@ INT_TYPE_TO_CHAR = Dict(
         AuxTag("kv") => -25234,
     )
 
+    @test get(aux, "kv", nothing) == -25234
+    @test get(aux, "aN", 0x99) === 0x99 
+
     for (uint_tag, et) in [('C', UInt8), ('S', UInt16), ('I', UInt32)]
         s = "ab:B:$(uint_tag),47,1,252,44,11"
         (k, v) = only(SAM.Auxiliary(s))
@@ -47,6 +60,9 @@ INT_TYPE_TO_CHAR = Dict(
         @test v == [-13, 12, -128, 127, 15]
         @test eltype(v) == et
     end
+
+    aux = SAM.Auxiliary("ka:i:-13\thc:w:1234")
+    @test aux["hc"] == Errors.InvalidTypeTag
 end
 
 @testset "Mutating" begin
@@ -132,6 +148,9 @@ end
             @test aux["S" * string(n)] == i
             delete!(aux, "S" * string(n))
         end
+
+        aux = SAM.Auxiliary(rand(UInt8, 4), 5)
+        @test_throws Exception aux["KL"] = "a\tb"
     end
 
     @testset "Chars" begin
@@ -220,6 +239,11 @@ end # SAM
     str = "ANAza1Zabc def \0bcHa4e9\0kvin\x9d\xff\xffzzf\xcd\x02m\xbcACBc\6\0\0\0\x03\x02\xde\x19>\x85"
     aux = BAM.Auxiliary(str)
     d = Dict(aux)
+
+    @test get(aux, "AN", nothing) === 'z'
+    @test get(aux, "zz", 5) === -14.466f-3
+    @test get(aux, "AB", 0x98) === 0x98
+    @test get(aux, "kN", missing) === missing
 
     # The array
     @test d == Dict(
@@ -368,7 +392,8 @@ end
         @test aux["LA"] == [0x01, 0x02, 0x03, 0xaf]
         @test String(MemView(aux)) == "LAH010203AF\0"
 
-        @test_throws Exception Hex(UInt8[])
+        aux = SAM.Auxiliary(b"JK:H:ae1bM9")
+        @test aux["JK"] == Errors.InvalidHex
     end
 
     @testset "Round trip" begin

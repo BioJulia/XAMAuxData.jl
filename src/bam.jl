@@ -10,7 +10,7 @@ public Auxiliary, AuxTag
 using MemViews: ImmutableMemView, MutableMemView, MemView
 using StringViews: StringView
 
-struct Auxiliary{T} <: AbstractAuxiliary
+struct Auxiliary{T} <: AbstractAuxiliary{T}
     x::T
     start::Int
 
@@ -215,10 +215,12 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
             # Shift right
             elseif length(span) < n_bytes_needed
                 rightshift = n_bytes_needed - length(span)
-                n_elem = lastindex(aux.x) - last(span)
-                resize!(aux.x, length(aux.x) + rightshift)
-                m = MemView(aux)
-                unsafe_copyto!(m, last(span)+1+rightshift, m, last(span)+1, n_elem)
+                oldsize = length(aux.x)
+                resize!(aux.x, oldsize + rightshift)
+                mem = MemView(aux)
+                @inbounds for i in length(mem):-1:last(span)+rightshift+1
+                    mem[i] = mem[i - rightshift]
+                end
             end
             mem = @inbounds MemView(aux)[first(span)-1:first(span) + n_bytes_needed - 1]
             write_auxvalue_typetag!(mem, bam_val)
@@ -258,7 +260,7 @@ function write_auxvalue_typetag!(mem::MutableMemView{UInt8}, bam_val)
             elseif type_tag in (UInt8('i'), UInt8('I'), UInt8('f'))
                 unsafe_store!(Ptr{UInt32}(ptr), htol(reinterpret(UInt32, bam_val)))
             elseif type_tag == UInt8('Z')
-                unsafe_copyto!(mem, 2, ImmutableMemView(bam_val), 1, length(mem)-2)
+                unsafe_copyto!(mem[2:end], ImmutableMemView(bam_val))
                 @inbounds mem[end] = 0x00
             elseif type_tag == UInt8('H')
                 m = @inbounds mem[2:end-1]
@@ -268,9 +270,10 @@ function write_auxvalue_typetag!(mem::MutableMemView{UInt8}, bam_val)
                 eltype_tag = get_type_tag(eltype(bam_val))
                 @inbounds mem[2] = eltype_tag
                 unsafe_store!(Ptr{UInt32}(ptr) + 1, htol(length(bam_val) % UInt32))
-                GC.@preserve bam_val begin
-                    dst = pointer(bam_val)
-                    unsafe_copyto!(Ptr{eltype(bam_val)}(ptr) + 5, dst, length(bam_val))
+                ptr = Ptr{eltype(bam_val)}(ptr + 5)
+                for num in bam_val
+                    unsafe_store!(ptr, htol(num))
+                    ptr += sizeof(num)
                 end
             else
                 error("Unreachable")

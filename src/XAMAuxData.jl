@@ -9,17 +9,13 @@ const unsafe = Unsafe()
 export Hex, AuxTag, SAM, BAM
 
 #=
-# TODO: More careful design around to_aux:
-* Needs to narrow it down to a few concrete types
-* Remove ByteString
-
-# TODO: What about GFA? Maybe make a new module which uses
-functions from SAM, and maybe even forwards some methods.
-
 TODO:
 Review use of errors. I.e. they must be used consistently.
 Maybe InvalidAuxTag is one error and InvalidAuxHeader is another. These are the only ones that
 can be emitted from iterating encodings.
+
+# TODO: What about GFA? Maybe make a new module which uses
+functions from SAM, and maybe even forwards some methods.
 =#
 
 # These are the numerical types supported by the BAM format.
@@ -73,30 +69,39 @@ get_type_tag(::Type{<:AbstractString}) = UInt8('Z')
 get_type_tag(::Type{<:AbstractVector}) = UInt8('B')
 get_type_tag(::Type{<:Hex}) = UInt8('H')
 
-as_aux_type(T::Type{<:AUX_NUMBER_TYPES}) = T == Union{} ? error() : T # TODO: Error
+function as_aux_type(T::Type{<:AUX_NUMBER_TYPES})
+    T != Union{} ? T : error("Cannot convert Union{} to XAM-compatible type")
+end
+
 as_aux_type(::Type{<:Real}) = Float32
 as_aux_type(::Type{<:Integer}) = Int32
 
-# TODO: Move validation of values into this function
 function as_aux_value end
 as_sam_aux_value(x) = as_aux_value(x)
 as_bam_aux_value(x) = as_aux_value(x)
 
 as_aux_value(x::Real) = Float32(x)::Float32
 
-function as_aux_value(x::AbstractChar)
+function as_aux_value(x::AbstractChar)::Union{Char, Error}
     c = Char(x)::Char
-    isascii(c) ? c : error() # TODO
+    isascii(c) ? c : error("AUX chars must be in '!':'~'")
 end
 
 as_aux_value(x::Hex) = x
-as_aux_value(s::AbstractString) = as_aux_value(String(s))
+as_aux_value(s::AbstractString)::ByteString = as_aux_value(String(s))
 
-function as_aux_value(s::Union{String, SubString{String}, StringView{ImmutableMemView{UInt8}}})
+function as_aux_value(
+    s::Union{String, SubString{String}, StringView{ImmutableMemView{UInt8}}}
+)::Union{ByteString, Error}
     mem = ImmutableMemView(codeunits(s))
-    is_printable(mem) ? s : error() # TODO
+    if is_printable(mem)
+        s
+    else
+        error("AUX string can only contain chars in [ !-~]")
+    end
 end
 
+# Returns an AbstractVector{<:AUX_NUMBER_TYPES}
 function as_aux_value(v::AbstractVector{<:Real})
     eltype(v) != Union{} && eltype(v) <: AUX_NUMBER_TYPES && return v
     E = as_aux_type(eltype(v))
@@ -115,10 +120,7 @@ function is_printable(v::AbstractVector{UInt8})
     res
 end
 
-"""
-    * setindex_nonexisting!(X, val, tag)
-"""
-abstract type AbstractAuxiliary <: AbstractDict{AuxTag, Any} end
+abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
 
 function (T::Type{<:AbstractAuxiliary})(itr)
     y = empty(T)
@@ -135,10 +137,15 @@ end
 
 function Base.copy(aux::AbstractAuxiliary)
     x = aux.x
-    isa(x, Vector{UInt8}) ? typeof(aux)(x[aux.start:end], 1) : aux
+    v = if x isa Vector{UInt8}
+        x[aux.start:end]
+    else
+        copy(MemView(aux))
+    end
+    typeof(aux)(v, 1)
 end
 
-Base.empty(T::Type{<:AbstractAuxiliary}) = T(UInt8[], 1)
+Base.empty(T::Type{<:AbstractAuxiliary{V}}) where V = T(empty(V), 1)
 
 function Base.length(aux::AbstractAuxiliary)::Int
     n = 0
@@ -159,13 +166,12 @@ end
 function Base.keys(aux::AbstractAuxiliary)
     Iterators.map(iter_encodings(aux)) do val
         if val isa Error
-            error("Bad AuxTag") # TODO
+            error("Bad AuxTag")
         else
             first(val)
         end
     end
 end
-
 
 function setindex_nonexisting! end
 

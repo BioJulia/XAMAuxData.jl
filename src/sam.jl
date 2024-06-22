@@ -40,7 +40,7 @@ function parse_encoded_aux(
 end
 
 
-struct Auxiliary{T} <: AbstractAuxiliary
+struct Auxiliary{T} <: AbstractAuxiliary{T}
     x::T
     start::Int
 
@@ -163,7 +163,7 @@ function setindex_nonexisting!(aux::MutableAuxiliary, val, key::AuxTag)
         data[oldlen + 4] = type_tag
         data[oldlen + 5] = UInt8(':')
     end
-    unsafe_copyto!(MemView(data), oldlen + 6, MemView(value_bytes), 1, length(value_bytes))
+    unsafe_copyto!(MemView(data)[oldlen+6:end], MemView(value_bytes)[1:length(value_bytes)])
     aux
 end
 
