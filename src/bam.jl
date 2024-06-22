@@ -10,6 +10,58 @@ public Auxiliary, AuxTag, Error, Errors
 using MemViews: ImmutableMemView, MutableMemView, MemView
 using StringViews: StringView
 
+"""
+    BAM.Auxiliary{T <: AbstractVector{UInt8}} <: AbstractDict{AuxTag, Any}
+
+Lazily loaded `AbstractDict` representing the auxiliary data fields of a BAM
+record. Immutable aux's can be constructed with `Auxiliary(x)` for any `x`
+with `MemView(x)` defined.
+Mutable aux data is constructed with `Auxiliary(x::Vector{UInt8}, start::Int)`,
+where `start` gives the first index of the used data in `x` - all data before
+`start` will be ignored and never modified.
+
+# Examples
+```jldoctest
+julia> immut = BAM.Auxiliary("KJS\7\\0ABZabc\\0");
+
+julia> immut["KJ"]
+0x0007
+
+julia> haskey(immut, "AB")
+true
+```
+
+# Extended help
+Since fields of `Auxiliary` are lazily loaded, it may contain invalid data.
+This package distinguishes two ways of being invalid: If the data does not conform
+to tab-separated fields of `AB:X:Z`, iterating the `Auxiliary` or accessing fields
+will error, and the whole `Auxiliary` is considered invalid.
+Use isvalid to check if this is the case.
+Alternatively, if the _value_ `Z` is invalid, the `Auxiliary` can be iterated and
+indexed, but that value will be returned as a value of [`Error`](@ref).
+
+See also: [`Error`](@ref)
+
+# Examples
+```jldoctest
+julia> invalid = BAM.Auxiliary("KVXA");
+
+julia> isvalid(invalid)
+false
+
+julia> invalid["KV"]
+ERROR: Unknown type tag in aux value.
+[...]
+
+julia> valid_badvalue = BAM.Auxiliary("KVA\f");
+
+julia> isvalid(valid_badvalue)
+true
+
+julia> valid_badvalue["KV"] isa Error
+true
+```
+"""
 struct Auxiliary{T} <: AbstractAuxiliary{T}
     x::T
     start::Int
@@ -176,7 +228,7 @@ end
 function Base.delete!(aux::MutableAuxiliary, k)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
-        v isa Error && throw(AuxException(Errors.InvalidAuxTag))
+        v isa Error && throw(AuxException(v))
         (tag, _, span) = v
         if tag == key
             offset = aux.start - 1

@@ -68,14 +68,35 @@ true
 ```
 
 # Extended help
-Since `Auxiliary` is lazily loaded, it may contain invalid data. Entries not
-formatted as `AB:X:Z` for valid `AuxTag` AB, any `X` and any sequence of bytes
-`Z` will throw an error when accessed.
-If `Z` is invalid, a value of [`Errors.Error`](@ref) will be returned when
-accessed.
-The function [`isvalid`](@ref)
+Since fields of `Auxiliary` are lazily loaded, it may contain invalid data.
+This package distinguishes two ways of being invalid: If the data does not conform
+to tab-separated fields of `AB:X:Z`, iterating the `Auxiliary` or accessing fields
+will error, and the whole `Auxiliary` is considered invalid.
+Use `isvalid` to check if this is the case.
+Alternatively, if the _value_ `Z` is invalid, the `Auxiliary` can be iterated and
+indexed, but that value will be returned as a value of [`Error`](@ref).
+
+See also: `isvalid`, [`Error`](@ref)
 
 # Examples
+```jldoctest
+julia> invalid = SAM.Auxiliary("KV:A<P");
+
+julia> isvalid(invalid)
+false
+
+julia> invalid["KV"]
+ERROR: Invalid SAM tag header. Expected <AuxTag>:<type tag>:, but found no colons.
+[...]
+
+julia> valid_badvalue = SAM.Auxiliary("KV:A:\f");
+
+julia> isvalid(valid_badvalue)
+true
+
+julia> valid_badvalue["KV"] isa Error
+true
+```
 """
 struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     x::T
@@ -114,7 +135,7 @@ function Base.iterate(aux::Auxiliary, state::Int=1)
     itval = iterate(it, state)
     itval === nothing && return nothing
     (val, new_state) = itval
-    val isa Error && throw(AuxException(Errors.InvalidAuxTag))
+    val isa Error && throw(AuxException(val))
     (key, typetag, span) = val
     value = load_auxvalue(typetag, @inbounds it.x.v[span])
     (key => value, new_state)
@@ -124,7 +145,7 @@ function Base.get(aux::Auxiliary, k, default)
     key = AuxTag(k)
     it = iter_encodings(aux)
     for i in it
-        i isa Error && throw(AuxException(Errors.InvalidAuxTag))
+        i isa Error && throw(AuxException(i))
         (auxtag, typetag, span) = i
         if auxtag == key
             return load_auxvalue(typetag, @inbounds it.x.v[span])
@@ -229,7 +250,7 @@ end
 function Base.delete!(aux::MutableAuxiliary, k)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
-        v isa Error && throw(AuxException(Errors.InvalidAuxTag))
+        v isa Error && throw(AuxException(v))
         (tag, _, span) = v
         if tag == key
             # Delete also an adjecent tab if it's not the only element

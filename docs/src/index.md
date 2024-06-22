@@ -1,7 +1,7 @@
 ```@meta
 CurrentModule = XAMAuxData
 DocTestSetup = quote
-    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors
+    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error
     using MemViews: MemView
 end
 ```
@@ -14,7 +14,7 @@ This package is intended to be used by other packages, such as XAM.jl and other 
 ## Core concepts
 XAMAuxData has two submodules - `SAM` and `BAM`. `SAM` is used for the text-based auxiliary format in SAM,
 PAF and GFA files. `BAM` is used for the binary encoded aux format in BAM files.
-Most examples in this documentation will use the SAM format, since it's more human readables.
+Most examples in this documentation will use the SAM format, since it's more human readable.
 Any differences to the BAM format will be explicitly mentioned.
 
 The single auxiliary field `AN:i:1234` is encoded as the key-value pair `AuxTag("AN") => 1234`.
@@ -43,7 +43,7 @@ Why not simply have them be two-byte strings?
 `AuxTags` are compact bitstypes and therefore not heap-allocated for extra performance.
 Also, the construction of an `AugTax` validates that it conforms to the regex `[A-Za-z][A-Za-z0-9]` per the SAM specs.
 
-`AuxTag`s can be converted to strings, as in below:
+Strings can be converted to `AuxTag` for convenience, as in below:
 
 ```jldoctest
 v = AuxTag[] # implicit conversion
@@ -65,8 +65,7 @@ ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]$".
 ```
 
 ## Constructing `Auxiliary` objects
-`SAM.Auxiliary` and `BAM.Auxiliary` are constructed the same way.
-They can each be constructed in two ways:
+`SAM.Auxiliary` and `BAM.Auxiliary` are constructed the same two ways.
 
 Immutable auxiliaries are constructed from any bytes-like object which has a `MemView` method.
 This may be a `String`, `SubString{String}`, `Memory{UInt8}` etc.
@@ -83,8 +82,8 @@ SAM.Auxiliary("AB:i:12\tKN:A:z")
 ```
 
 In order to mutate auxiliary objects, their data need to be able to be resized, and therefore must be backed by a `Vector{UInt8}`.
-Mutable auxiliaries can be constructed from a `Vector{UInt8}` and a starting index. Any data before the starting index which is not read to write to.
-This starting index enables `Auxiliary` objects to share the same `Vector` that is used to store PAF, SAM or GFA records:
+Mutable auxiliaries can be constructed from a `Vector{UInt8}` and a starting index. Any data before the starting index is never touched by the `Auxiliary` object, even if e.g. the object is emptied.
+This starting index enables `Auxiliary` objects to share the same `Vector` that is used to store other data of PAF, SAM or GFA records.
 
 In the example below, the first 22 bytes of the vector (the `some not-aux data here` part)
 corresponds to the data before the aux data, and hence the first index of the aux data in the vector is 23.
@@ -100,16 +99,13 @@ aux = SAM.Auxiliary(data, 23)
   "KN" => 'z'
 ```
 
-No matter whether constructed from a memory view or from a `Vector`, there cannot be any unused bytes,
-e.g. trailing whitespace in the input.
+No matter whether constructed from a memory view or from a `Vector`, there cannot be any unused bytes at or after the starting index in an `Auxiliary`.
 Any trailing bytes will be considered part of the auxiliary data, and may possibly be considered invalid:
 ```jldoctest
-bad_aux = SAM.Auxiliary("AB:A:p\t\t\t") # trailing tabs
-isvalid(bad_aux)
+julia>  bad_aux = SAM.Auxiliary("AB:A:p\t\t"); # trailing tabs
 
-# output
+julia> isvalid(bad_aux)
 false
-
 ```
 
 ## Manipulating `Auxiliary` objects
@@ -231,8 +227,6 @@ println(String(MemView(aux)))
 AB:B:C,1,2
 AB:H:0102
 ```
-
-## Low-level interface
 
 ## Writing `Auxiliary`s to files
 Calling `MemView` on an `Auxiliary` will return a view of the underlying data.

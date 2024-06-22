@@ -157,7 +157,7 @@ To check if all values of `aux` is valid, use
 
 # Examples
 ```jldoctest
-julia> aux = BAM.Auxiliary("KLZab\t\\0ABCF");
+julia> aux = BAM.Auxiliary("KLZab\\t\\0ABCF");
 
 julia> isvalid(aux)
 true
@@ -165,7 +165,7 @@ true
 julia> aux["KL"] == Errors.InvalidString
 true
 
-julia> aux = BAM.Auxiliary("KLZab\tABCF");
+julia> aux = BAM.Auxiliary("KLZab\\tABCF");
 
 julia> isvalid(aux)
 false
@@ -210,7 +210,7 @@ end
 function Base.keys(aux::AbstractAuxiliary)
     Iterators.map(iter_encodings(aux)) do val
         if val isa Error
-            throw(AuxException(Errors.InvalidAuxTag))
+            throw(AuxException(val))
         else
             first(val)
         end
@@ -235,18 +235,8 @@ is_printable_char(x::UInt8) = in(x, UInt8('!'):UInt8('~'))
     Errors
 
 Module containing the error values of XAMAuxData.
-The errors are _nonexhausitve_ - more might be added in a non-breaking release.
 
-The following errors may contained in `AbstractAuxiliary` instead of the real
-value:
-* `InvalidTypeTag` (SAM only): An aux value with an unknown type
-* `InvalidArrayEltype` (SAM only): A `B` value with an unknown element type
-* `InvalidInt` (SAM only): An integer that can't be parsed to an `Int32`
-* `InvalidFloat` (SAM only): A float that can't be parsed to a `Float32`
-* `InvalidChar`: Loading a `Char` not in `'!':'~'`
-* `InvalidString`: A string that contains a character not in `re"[ !-~]"`
-* `InvalidHex`: a `H` value with an odd number of symbols, or symbol not in `re"[0-9A-F]"`
-* `InvalidArray`: A malformed `B` value
+See also: [`Error`](@ref)
 """
 module Errors
 
@@ -275,6 +265,28 @@ end
 end # module errors
 
 using .Errors: Errors, Error
+
+"""
+    Error
+
+Enum type representing errors returned when loading invalid auxiliary data
+values.
+The errors are _nonexhausitve_ - more might be added in a non-breaking release.
+
+The following errors may contained in `AbstractAuxiliary` instead of the real
+value:
+* `InvalidTypeTag` (SAM only): An aux value with an unknown type
+* `InvalidArrayEltype` (SAM only): A `B` value with an unknown element type
+* `InvalidInt` (SAM only): An integer that can't be parsed to an `Int32`
+* `InvalidFloat` (SAM only): A float that can't be parsed to a `Float32`
+* `InvalidChar`: Loading a `Char` not in `'!':'~'`
+* `InvalidString`: A string that contains a character not in `re"[ !-~]"`
+* `InvalidHex`: a `H` value with an odd number of symbols, or symbol not in `re"[0-9A-F]"`
+* `InvalidArray`: A malformed `B` value
+
+See also: [`Errors`](@ref)
+"""
+Error
 
 struct AuxException <: Exception
     error::Error
