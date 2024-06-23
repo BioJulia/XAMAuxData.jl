@@ -164,21 +164,24 @@ end
 
 function load_array(T::Type, mem::ImmutableMemView{UInt8})::Union{Memory, Error}
     isempty(mem) && return Memory{T}()
-    length = count(==(UInt8(',')), mem)
+    length(mem) == 1 && return Errors.InvalidArray
+    len = count(==(UInt8(',')), mem)
     mem[1] == UInt8(',') || return Errors.InvalidArray
-    res = Memory{T}(undef, length)
+    res = Memory{T}(undef, len)
     n = 0
-    for (n_element, ele_mem) in enumerate(DelimitedIterator(@inbounds(mem[2:end]), UInt8(',')))
+    for ele_mem in DelimitedIterator(@inbounds(mem[2:end]), UInt8(','))
+        n += 1
         val = tryparse(T, StringView(ele_mem))
         val === nothing && return Errors.InvalidArray
-        @inbounds res[n_element] = val
+        @inbounds res[n] = val
+
     end
     res
 end
 
 function load_auxvalue(type_tag::UInt8, mem::ImmutableMemView{UInt8})
     return if type_tag == UInt8('A')
-        isempty(mem) && return Errors.InvalidChar
+        length(mem) == 1 || return Errors.InvalidChar
         b = @inbounds mem[1]
         is_printable_char(b) ? Char(b) : Errors.InvalidChar
     elseif type_tag == UInt8('i')
@@ -186,7 +189,6 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemView{UInt8})
         n = tryparse(Int, StringView(mem); base=10)
         n === nothing ? Errors.InvalidInt : n
     elseif type_tag == UInt8('f')
-        isempty(mem) && return Errors.InvalidFloat
         n = tryparse(Float32, StringView(mem))
         n === nothing ? Errors.InvalidFloat : n
     elseif type_tag == UInt8('Z')

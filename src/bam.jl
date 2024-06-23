@@ -166,6 +166,7 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
 end
 
 function load_array(mem::ImmutableMemView{UInt8})
+    # This might not be possible to hit in practise.
     length(mem) < 5 && return Errors.InvalidArray
     @inbounds begin
         # The correctness of this byte has already been validated in the EncodedIterator

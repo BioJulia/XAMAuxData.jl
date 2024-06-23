@@ -127,6 +127,17 @@ end
             @test String(MemView(aux)) == "AB:i:" * string(i)
             @test aux["AB"] === Int(i)
         end
+
+        for bad_data in [
+            "--1",
+            "1e9",
+            "0xaedc",
+            "\tKL:A:p",
+            "111122223333444455556666777788889999",
+        ]
+            aux = SAM.Auxiliary("AB:i:" * bad_data)
+            @test aux["AB"] == Errors.InvalidInt
+        end
     end
 
     @testset "Floats" begin
@@ -142,6 +153,16 @@ end
             aux["FL"] = i
             @test String(MemView(aux)) == "xa:Z:some string!  \tFL:f:" * string(Float32(i))
             @test aux["FL"] === Float32(i)
+        end
+
+        for bad_data in [
+            "2e300",
+            "++++9.0",
+            "1.3e2F0",
+            "\tKL:A:p",
+        ]
+            aux = SAM.Auxiliary("AB:f:" * bad_data)
+            @test aux["AB"] == Errors.InvalidFloat
         end
     end
 
@@ -161,6 +182,15 @@ end
 
         aux = SAM.Auxiliary(rand(UInt8, 4), 5)
         @test_throws Exception aux["KL"] = "a\tb"
+
+        for bad_data in [
+            "abcde\ra",
+            "a\0\0a",
+            "æøå",
+        ]
+            aux = SAM.Auxiliary("AB:Z:" * bad_data)
+            @test aux["AB"] == Errors.InvalidString
+        end
     end
 
     @testset "Chars" begin
@@ -174,6 +204,19 @@ end
             @test String(MemView(aux)) == "k1:A:" * Char(c)
             @test aux["k1"] === Char(c)
             empty!(aux)
+        end
+
+        for bad_data in [
+            "Æ",
+            "\f",
+            "\x7f",
+            "ab",
+            "\tKV:Z:A",
+            "ab\tKV:Z:A",
+            "",
+        ]
+            aux = SAM.Auxiliary("AB:A:" * bad_data)
+            @test aux["AB"] == Errors.InvalidChar
         end
     end
 
@@ -378,6 +421,15 @@ end
             @test String(MemView(aux)) == "k1A" * Char(c)
             empty!(aux)
         end
+
+        for bad_data in [
+            "Æ",
+            "\f",
+            "\x7f",
+        ]
+            aux = BAM.Auxiliary("ABA" * bad_data)
+            @test aux["AB"] == Errors.InvalidChar
+        end
     end
 
     @testset "Strings" begin
@@ -394,6 +446,10 @@ end
             @test aux["S" * string(n)] == i
             delete!(aux, "S" * string(n))
         end
+
+        @test BAM.Auxiliary("ABZab\x7fa\0")["AB"] == Errors.InvalidString
+        @test BAM.Auxiliary("ABZab\r\0")["AB"] == Errors.InvalidString
+        @test BAM.Auxiliary("ABZ\na\0")["AB"] == Errors.InvalidString
     end
 
     @testset "Hex" begin
@@ -485,6 +541,30 @@ end # BAM
         aux["Kk"] = view(mem, 1:lastindex(mem))
         @test aux["Kk"] isa AbstractVector{Float32}
         @test aux["Kk"] == Float32.(mem)
+    end
+
+    @testset "Bad arrays" begin
+        for bad_eltype in [
+            "W,1,2,3",
+            "F,1.0,2.0",
+            "b,0,1"
+        ]
+            aux = SAM.Auxiliary("AB:B:" * bad_eltype)
+            @test aux["AB"] == Errors.InvalidArrayEltype
+        end
+
+        for bad_array in [
+            "C,1,-2,3",
+            "c,1,2,3,-128,128",
+            "s,39000,1",
+            "C1,2,3",
+            "I,1,2,3,",
+            "I,1,-2,3",
+            "i,",
+        ]
+            aux = SAM.Auxiliary("AB:B:" * bad_array)
+            @test aux["AB"] == Errors.InvalidArray
+        end
     end
 end
 

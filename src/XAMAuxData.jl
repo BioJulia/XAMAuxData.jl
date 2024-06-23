@@ -295,7 +295,7 @@ end
 function Base.showerror(io::IO, error::AuxException)
     inner = error.error
     s = if inner == Errors.TooShortMemory
-        "Not enough bytes available in Aux data to encode a minimal field."
+        "Not enough bytes remaining in Aux data to encode a full field"
     elseif inner == Errors.InvalidAuxTag
         "Invalid AuxTag. Tags must conform to r\"^[A-Za-z][A-Za-z0-9]\$\"."
     elseif inner == Errors.NoColons
