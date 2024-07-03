@@ -134,15 +134,6 @@ end
 
 abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
 
-function (T::Type{<:AbstractAuxiliary})(itr)
-    y = empty(T)
-    for (k, v) in itr
-        tag = convert(AuxTag, k)
-        setindex!(y, v, tag)
-    end
-    y
-end
-
 """
     isvalid(aux::Auxiliary) -> Bool
 
@@ -356,17 +347,6 @@ function pack_hex(a::UInt8)::UInt8 # 0xff for bad hex
     else
         0xff
     end
-end
-
-# For this constructor, we can rely on the keys being unique, so we can
-# use the more efficient setindex_nonexisting!
-function (T::Type{<:AbstractAuxiliary})(d::AbstractDict)
-    y = empty(T)
-    for (k, v) in pairs(d)
-        tag = convert(AuxTag, k)
-        setindex_nonexisting!(y, v, tag)
-    end
-    y
 end
 
 function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)
