@@ -156,7 +156,7 @@ end
         end
 
         for bad_data in [
-            "2e300",
+            "Ke300",
             "++++9.0",
             "1.3e2F0",
             "\tKL:A:p",
