@@ -16,7 +16,7 @@ import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
-using MemViews: MemView, ImmutableMemView
+using MemoryViews: MemoryView, ImmutableMemoryView
 using StringViews: StringView
 
 struct EncodedIterator <: AbstractEncodedIterator
@@ -34,7 +34,7 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
 end
 
 function parse_encoded_aux(
-    mem::ImmutableMemView{UInt8},
+    mem::ImmutableMemoryView{UInt8},
 )::Union{Tuple{AuxTag, UInt8, UnitRange{Int}}, Error}
     length(mem) < 5 && return Errors.TooShortMemory
     t1 = @inbounds mem[1]
@@ -51,7 +51,7 @@ end
 
 Lazily loaded `AbstractDict` representing the auxiliary data fields of a SAM
 record. Immutable aux's can be constructed with `Auxiliary(x)` for any `x`
-with `MemView(x)` defined.
+with `MemoryView(x)` defined.
 Mutable aux data is constructed with `Auxiliary(x::Vector{UInt8}, start::Int)`,
 where `start` gives the first index of the used data in `x` - all data before
 `start` will be ignored and never modified.
@@ -109,19 +109,19 @@ struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     end
 
     function Auxiliary(x)
-        mem = ImmutableMemView(x)
-        eltype(mem) == UInt8 || error("Must construct Auxiliary from MemView{UInt8}")
-        new{ImmutableMemView{UInt8}}(mem, 1)
+        mem = ImmutableMemoryView(x)
+        eltype(mem) == UInt8 || error("Must construct Auxiliary from MemoryView{UInt8}")
+        new{ImmutableMemoryView{UInt8}}(mem, 1)
     end
 end
 
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 
 function iter_encodings(aux::Auxiliary)
-    EncodedIterator(DelimitedIterator(ImmutableMemView(aux), UInt8('\t')))
+    EncodedIterator(DelimitedIterator(ImmutableMemoryView(aux), UInt8('\t')))
 end
 
-MemView(x::Auxiliary) = @inbounds MemView(x.x)[x.start:end]
+MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
@@ -154,7 +154,7 @@ function Base.get(aux::Auxiliary, k, default)
     default
 end
 
-function load_array(mem::ImmutableMemView{UInt8})::Union{Memory, Error}
+function load_array(mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
     isempty(mem) && return Errors.InvalidArrayEltype
     eltype_tag = @inbounds mem[1]
     eltype = get(ELTYPE_DICT, eltype_tag, nothing)
@@ -162,7 +162,7 @@ function load_array(mem::ImmutableMemView{UInt8})::Union{Memory, Error}
     load_array(eltype, @inbounds mem[2:end])
 end
 
-function load_array(T::Type, mem::ImmutableMemView{UInt8})::Union{Memory, Error}
+function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
     isempty(mem) && return Memory{T}()
     length(mem) == 1 && return Errors.InvalidArray
     len = count(==(UInt8(',')), mem)
@@ -179,7 +179,7 @@ function load_array(T::Type, mem::ImmutableMemView{UInt8})::Union{Memory, Error}
     res
 end
 
-function load_auxvalue(type_tag::UInt8, mem::ImmutableMemView{UInt8})
+function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
     return if type_tag == UInt8('A')
         length(mem) == 1 || return Errors.InvalidChar
         b = @inbounds mem[1]
@@ -223,7 +223,7 @@ function setindex_nonexisting!(aux::MutableAuxiliary, val, key::AuxTag)
         data[oldlen + 4] = type_tag
         data[oldlen + 5] = UInt8(':')
     end
-    unsafe_copyto!(MemView(data)[oldlen+6:end], MemView(value_bytes)[1:length(value_bytes)])
+    unsafe_copyto!(MemoryView(data)[oldlen+6:end], MemoryView(value_bytes)[1:length(value_bytes)])
     aux
 end
 
@@ -235,7 +235,7 @@ end
 
 function as_serialized_bytes(hex::Hex)
     m = Memory{UInt8}(undef, 2 * length(hex.x))
-    hexencode!(MemView(m), hex)
+    hexencode!(MemoryView(m), hex)
     m
 end 
 

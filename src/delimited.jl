@@ -2,21 +2,21 @@
     DelimitedIterator(data, x::T)
 
 Return an iterator over memory-backed data `data` of eltype `T`.
-Returns `MemView`s of the same elements as `data`, split by `x`.
+Returns `MemoryView`s of the same elements as `data`, split by `x`.
 """
 struct DelimitedIterator{T}
-    v::ImmutableMemView{T}
+    v::ImmutableMemoryView{T}
     d::T
 end
 
 function DelimitedIterator(x, d::T) where {T}
-    v = ImmutableMemView(x)
-    eltype(v) == T || error("MemView(x) must be of eltype T") # TODO
+    v = ImmutableMemoryView(x)
+    eltype(v) == T || error("MemoryView(x) must be of eltype T") # TODO
     DelimitedIterator{T}(v, d)
 end
 
 Base.IteratorSize(::Type{<:DelimitedIterator}) = Base.SizeUnknown()
-Base.eltype(::Type{DelimitedIterator{T}}) where {T} = ImmutableMemView{T}
+Base.eltype(::Type{DelimitedIterator{T}}) where {T} = ImmutableMemoryView{T}
 
 function Base.iterate(d::DelimitedIterator, state::Int=1)
     len = length(d.v)

@@ -1,6 +1,6 @@
 module XAMAuxData
 
-using MemViews: MemViews, MemView, MutableMemView, ImmutableMemView
+using MemoryViews: MemoryViews, MemoryView, MutableMemoryView, ImmutableMemoryView
 using StringViews: StringView
 
 struct Unsafe end
@@ -26,14 +26,14 @@ julia> aux = SAM.Auxiliary(UInt8[], 1);
 
 julia> aux["AB"] = Hex([0xae, 0xf8, 0x6c]);
 
-julia> String(MemView(aux))
+julia> String(MemoryView(aux))
 "AB:H:AEF86C"
 
 julia> aux = BAM.Auxiliary(UInt8[], 1);
 
 julia> aux["AB"] = Hex([0xae, 0xf8, 0x6c]);
 
-julia> String(MemView(aux))
+julia> String(MemoryView(aux))
 "ABHAEF86C\\0"
 ```
 """
@@ -49,7 +49,7 @@ end
 # Must encode to uppercase A-F
 hexencode_nibble(u::UInt8)::UInt8 = u < 0x0a ? UInt8('0') + u : UInt8('A') - 0x0a + u
 
-function hexencode!(mem::MutableMemView, hex::Hex)
+function hexencode!(mem::MutableMemoryView, hex::Hex)
     @inbounds for (byte_no, byte) in enumerate(hex.x)
         mem[2 * byte_no - 1] = hexencode_nibble(byte >> 4)
         mem[2 * byte_no] = hexencode_nibble(byte & 0x0f)
@@ -95,16 +95,16 @@ as_aux_value(x::Hex) = x
 
 function as_aux_value(s::AbstractString)
     cu = codeunits(s)
-    auxs = if MemViews.MemKind(typeof(cu)) isa MemViews.IsMemory
+    auxs = if MemoryViews.MemoryKind(typeof(cu)) isa MemoryViews.IsMemory
         s
     else
         String(s)
     end
     # Take view of codeunits, because StringViews' codeunits return
     # the underlying array, so this makes it work for StringViews,
-    # without having to implement MemView(::StringView), which would
+    # without having to implement MemoryView(::StringView), which would
     # be piracy in this package.
-    mem = ImmutableMemView(codeunits(auxs))
+    mem = ImmutableMemoryView(codeunits(auxs))
     if is_printable(mem)
         auxs
     else
@@ -184,7 +184,7 @@ function Base.copy(aux::AbstractAuxiliary)
     v = if x isa Vector{UInt8}
         x[aux.start:end]
     else
-        copy(MemView(aux))
+        copy(MemoryView(aux))
     end
     typeof(aux)(v, 1)
 end
@@ -330,7 +330,7 @@ function iter_encodings end
 Base.IteratorSize(::Type{<:AbstractEncodedIterator}) = Base.SizeUnknown()
 Base.eltype(::Type{AbstractEncodedIterator}) = Union{Error, Tuple{AuxTag, UInt8, UnitRange{Int}}}
 
-function load_hex(mem::ImmutableMemView)::Union{Memory{UInt8}, Error}
+function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
     len = length(mem)
     # Note: According to specs, Hex can't be empty, but we load it anyway
     # because we should be generous in what we accept

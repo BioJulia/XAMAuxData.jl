@@ -2,7 +2,7 @@
 CurrentModule = XAMAuxData
 DocTestSetup = quote
     using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error
-    using MemViews: MemView
+    using MemoryViews: MemoryView
 end
 ```
 
@@ -17,20 +17,22 @@ PAF and GFA files. `BAM` is used for the binary encoded aux format in BAM files.
 Most examples in this documentation will use the SAM format, since it's more human readable.
 Any differences to the BAM format will be explicitly mentioned.
 
+!!! note
+    Annoyingly, the specification of GFA auxiliary fields differ slightly from that of SAM
+    auxiliary fields. Hence, in the future, a dedicated GFA module may be introduced.
+
 The single auxiliary field `AN:i:1234` is encoded as the key-value pair `AuxTag("AN") => 1234`.
-A collection of aux fields are represented by a `SAM.Auxiliary` (or `BAM.Auxiliary`), which are instances of `AbstractDict{AuxTag, Any}`.
+A collection of aux fields are represented by a `SAM.Auxiliary` (or `BAM.Auxiliary`), which are subtypes of `AbstractDict{AuxTag, Any}`.
 
 The package may be used like this:
 ```jldoctest
 # Import the module you want to use
-using XAMAuxData: SAM
+julia> using XAMAuxData: SAM
 
-data = "AN:A:z\ta1:Z:abc def \tkv:i:-25234\tzz:f:-14.466e-3"
-aux = SAM.Auxiliary(data)
-aux
+julia> data = "AN:A:z\ta1:Z:abc def \tkv:i:-25234\tzz:f:-14.466e-3";
 
-# output
-4-element XAMAuxData.SAM.Auxiliary{MemViews.ImmutableMemView{UInt8}}:
+julia> aux = SAM.Auxiliary(data)
+4-element XAMAuxData.SAM.Auxiliary{MemoryViews.ImmutableMemoryView{UInt8}}:
   "AN" => 'z'
   "a1" => "abc def "
   "kv" => -25234
@@ -46,20 +48,14 @@ Also, the construction of an `AugTax` validates that it conforms to the regex `[
 Strings can be converted to `AuxTag` for convenience, as in below:
 
 ```jldoctest
-v = AuxTag[] # implicit conversion
-push!(v, "AB")
-v
-
-# output
+julia> push!(AuxTag[], "AB") # implicit conversion
 1-element Vector{AuxTag}:
  AuxTag("AB")
 ```
 
 Attempting to construct an invalid `AuxTag` will error:
 ```jldoctest
-AuxTag("11")
-
-# output
+julia> AuxTag("11")
 ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]$".
 [...]
 ```
@@ -67,16 +63,14 @@ ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]$".
 ## Constructing `Auxiliary` objects
 `SAM.Auxiliary` and `BAM.Auxiliary` are constructed the same two ways.
 
-Immutable auxiliaries are constructed from any bytes-like object which has a `MemView` method.
+Immutable auxiliaries are constructed from any bytes-like object which has a `MemoryView` method.
 This may be a `String`, `SubString{String}`, `Memory{UInt8}` etc.
 Auxiliary objects are constructed directly from these:
 
 ```jldoctest
 # Make an IMMUTABLE Auxiliary
-SAM.Auxiliary("AB:i:12\tKN:A:z")
-
-# output
-2-element XAMAuxData.SAM.Auxiliary{MemViews.ImmutableMemView{UInt8}}:
+julia> aux = SAM.Auxiliary("AB:i:12\tKN:A:z")
+2-element XAMAuxData.SAM.Auxiliary{MemoryViews.ImmutableMemoryView{UInt8}}:
   "AB" => 12
   "KN" => 'z'
 ```
@@ -89,11 +83,9 @@ In the example below, the first 22 bytes of the vector (the `some not-aux data h
 corresponds to the data before the aux data, and hence the first index of the aux data in the vector is 23.
 
 ```jldoctest
-data = collect(codeunits("some not-aux data hereAB:i:12\tKN:A:z"))
-# Make a MUTABLE Auxiliary
-aux = SAM.Auxiliary(data, 23)
+julia> data = collect(codeunits("some not-aux data hereAB:i:12\tKN:A:z"));
 
-# output
+julia> aux = SAM.Auxiliary(data, 23) # Make a MUTABLE Auxiliary
 2-element XAMAuxData.SAM.Auxiliary{Vector{UInt8}}:
   "AB" => 12
   "KN" => 'z'
@@ -102,7 +94,7 @@ aux = SAM.Auxiliary(data, 23)
 No matter whether constructed from a memory view or from a `Vector`, there cannot be any unused bytes at or after the starting index in an `Auxiliary`.
 Any trailing bytes will be considered part of the auxiliary data, and may possibly be considered invalid:
 ```jldoctest
-julia>  bad_aux = SAM.Auxiliary("AB:A:p\t\t"); # trailing tabs
+julia> bad_aux = SAM.Auxiliary("AB:A:p\t\t"); # trailing tabs
 
 julia> isvalid(bad_aux)
 false
@@ -112,29 +104,24 @@ false
 `Auxiliary`'s can be read and written like a normal `AbstractDict{AuxTag, Any}`:
 
 ```jldoctest
-# Create empty mutable SAM.Auxiliary
-aux = SAM.Auxiliary(UInt8[], 1)
+julia> aux = SAM.Auxiliary(UInt8[], 1); # empty Auxiliary
 
-# Note: The strings are implicitly `convert`ed to AuxTag
-aux["AX"] = 'y'
-aux["cm"] = 12.1
-aux["G1"] = [-1.24, 33.1]
+julia> # Note: The strings are implicitly `convert`ed to AuxTag
+       aux["AX"] = 'y'; aux["AX"]
+'y': ASCII/Unicode U+0079 (category Ll: Letter, lowercase)
 
-println(length(aux))
-println(aux["AX"])
-println(aux["cm"])
-println(aux["G1"])
+julia> aux["cm"] = 12.1; aux["cm"]
+12.1f0
 
-# overwrite AX key
-aux["AX"] = [0x01, 0x02]
-println(aux["AX"])
+julia> aux["G1"] = [-1.24, 33.1]; aux["G1"]
+2-element Memory{Float32}:
+ -1.24
+ 33.1
 
-# output
-3
-y
-12.1
-Float32[-1.24, 33.1]
-UInt8[0x01, 0x02]
+julia> aux["AX"] = [0x01, 0x02]; aux["AX"] # overwrite AX key
+2-element Memory{UInt8}:
+ 0x01
+ 0x02
 ```
 
 Like `Dict`, the order of key/value pairs in auxiliaries is arbitrary and cannot be relied on.
@@ -174,8 +161,8 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
 | `AbstractVector{Int8}`            | `B:c`           |
 | `AbstractVector{UInt16}`          | `B:S`           |
 | `AbstractVector{Int16}`           | `B:s`           |
-| `AbstractVector{<:Signed}`        | `B:i`           |
-| `AbstractVector{<:Unsigned}`      | `B:I`           |
+| `AbstractVector{<:Signed}`¶       | `B:i`           |
+| `AbstractVector{<:Unsigned}`¶     | `B:I`           |
 | `AbstractVector{<:AbstractFloat}`‡| `B:f`           |
 | `Hex`                             | `H`             |
 
@@ -185,12 +172,14 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
   outside the recommended range can still be read on 64-bit systems.
 - ✝ Permitted `Char` values are only those in `'!':'~'`.
 - ‡ Only values representable by a `Float32` are allowed.
-- § Only characters in `'!':'~'` and spaces (`' '`) are permitted in strings 
+- § Only characters in `'!':'~'` and spaces (`' '`) are permitted in strings
+- ¶ These are stored as `Int32` and `UInt32` for `Signed` and `Unsigned`, respectively.
 
 ### BAM element types
 The only different between SAM and BAM types is that the latter format permits different types of integers.
 Hence, except the types mentioned below, all the SAM types in the table above are also supported in BAM,
 with the same Julia <-> BAM type correspondance.
+Further, reading a value of `i` will return an `Int32` instead of an `Int`.
 
 | Input type | BAM type | Julia type read|
 | -----------|----------|--------------- |
@@ -212,16 +201,16 @@ However, if you want to write an `AbstractVector{UInt8}` value explicitly as an 
 aux = SAM.Auxiliary(UInt8[], 1)
 aux["AB"] = UInt8[0x01, 0x02]
 
-using MemViews
+using MemoryViews
 # Print the memory content of the aux.
 # The array was written as a value of the type B:c
-println(String(MemView(aux)))
+println(String(MemoryView(aux)))
 
 # Wrap input type in the Hex type
 aux["AB"] = Hex(UInt8[0x01, 0x02])
 
 # It is now written as a H instead
-println(String(MemView(aux)))
+println(String(MemoryView(aux)))
 
 # output
 AB:B:C,1,2
@@ -229,7 +218,7 @@ AB:H:0102
 ```
 
 ## Writing `Auxiliary`s to files
-Calling `MemView` on an `Auxiliary` will return a view of the underlying data.
+Calling `MemoryView` on an `Auxiliary` will return a view of the underlying data.
 This data is guaranteed to be valid SAM/BAM auxiliary data:
 
 ```jldoctest
@@ -238,8 +227,8 @@ aux = SAM.Auxiliary(field1 * '\t' * field2)
 
 # Get a view of the data underlying `aux`.
 # This is guaranteed to be valid SAM data (and likewise for BAM)
-using MemViews
-mem = MemView(aux)
+using MemoryViews
+mem = MemoryView(aux)
 
 # We make no guarantees about which order the two fields are,
 # but we DO guarantee the memory is a valid SAM aux data

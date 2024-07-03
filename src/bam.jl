@@ -7,7 +7,7 @@ import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..
 
 public Auxiliary, AuxTag, Error, Errors
 
-using MemViews: ImmutableMemView, MutableMemView, MemView
+using MemoryViews: ImmutableMemoryView, MutableMemoryView, MemoryView
 using StringViews: StringView
 
 """
@@ -15,7 +15,7 @@ using StringViews: StringView
 
 Lazily loaded `AbstractDict` representing the auxiliary data fields of a BAM
 record. Immutable aux's can be constructed with `Auxiliary(x)` for any `x`
-with `MemView(x)` defined.
+with `MemoryView(x)` defined.
 Mutable aux data is constructed with `Auxiliary(x::Vector{UInt8}, start::Int)`,
 where `start` gives the first index of the used data in `x` - all data before
 `start` will be ignored and never modified.
@@ -72,15 +72,15 @@ struct Auxiliary{T} <: AbstractAuxiliary{T}
     end
 
     function Auxiliary(x)
-        mem = ImmutableMemView(x)
-        eltype(mem) == UInt8 || error("Must construct Auxiliary from MemView{UInt8}")
-        new{ImmutableMemView{UInt8}}(mem, 1)
+        mem = ImmutableMemoryView(x)
+        eltype(mem) == UInt8 || error("Must construct Auxiliary from MemoryView{UInt8}")
+        new{ImmutableMemoryView{UInt8}}(mem, 1)
     end
 end
 
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 
-MemView(x::Auxiliary) = @inbounds MemView(x.x)[x.start:end]
+MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
@@ -102,10 +102,10 @@ function Base.iterate(aux::Auxiliary, state::Int=1)
 end
 
 struct EncodedIterator <: AbstractEncodedIterator
-    mem::ImmutableMemView{UInt8}
+    mem::ImmutableMemoryView{UInt8}
 end
 
-iter_encodings(aux::Auxiliary) = EncodedIterator(ImmutableMemView(aux))
+iter_encodings(aux::Auxiliary) = EncodedIterator(ImmutableMemoryView(aux))
 
 function Base.iterate(it::EncodedIterator, state::Int=1)
     mem = it.mem
@@ -165,7 +165,7 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
     ((tag, type_tag, start:stop), stop + 1)
 end
 
-function load_array(mem::ImmutableMemView{UInt8})
+function load_array(mem::ImmutableMemoryView{UInt8})
     # This might not be possible to hit in practise.
     length(mem) < 5 && return Errors.InvalidArray
     @inbounds begin
@@ -179,7 +179,7 @@ function load_array(mem::ImmutableMemView{UInt8})
     load_array(eltype, n_elements, @inbounds mem[6:end])
 end
 
-function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemView{UInt8})
+function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemoryView{UInt8})
     res = reinterpret(T, mem)
     # Should not be possible, since the number of elements is used to determine
     # the memory size
@@ -187,7 +187,7 @@ function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemView{UInt8})
     res
 end
 
-function load_auxvalue(type_tag::UInt8, mem::ImmutableMemView{UInt8})
+function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
     if type_tag == UInt8('C')
         @inbounds mem[1]
     elseif type_tag == UInt8('c')
@@ -244,7 +244,7 @@ bytes_needed(x::Union{Int8, UInt8, Char}) = 1
 bytes_needed(x::Union{Int16, UInt16}) = 2
 bytes_needed(x::Union{Int32, UInt32, Float32}) = 4
 
-bytes_needed(x::AbstractString) = length(MemView(codeunits(x))) + 1 # null byte
+bytes_needed(x::AbstractString) = length(MemoryView(codeunits(x))) + 1 # null byte
 bytes_needed(x::Hex) = 2 * length(x.x) + 1 # null byte
 
 function bytes_needed(x::AbstractVector{<:AUX_NUMBER_TYPES})
@@ -272,12 +272,12 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
                 rightshift = n_bytes_needed - length(span)
                 oldsize = length(aux.x)
                 resize!(aux.x, oldsize + rightshift)
-                mem = MemView(aux)
+                mem = MemoryView(aux)
                 @inbounds for i in length(mem):-1:last(span)+rightshift+1
                     mem[i] = mem[i - rightshift]
                 end
             end
-            mem = @inbounds MemView(aux)[first(span)-1:first(span) + n_bytes_needed - 1]
+            mem = @inbounds MemoryView(aux)[first(span)-1:first(span) + n_bytes_needed - 1]
             write_auxvalue_typetag!(mem, bam_val)
             return aux
         end
@@ -295,12 +295,12 @@ function setindex_nonexisting!(aux::MutableAuxiliary, val, k)
     resize!(data, old_len + 3 + n_bytes_needed)
     @inbounds data[old_len + 1] = key.x[1]
     @inbounds data[old_len + 2] = key.x[2]
-    mem = @inbounds MemView(aux)[end - n_bytes_needed: end]
+    mem = @inbounds MemoryView(aux)[end - n_bytes_needed: end]
     write_auxvalue_typetag!(mem, bam_val)
     aux
 end
 
-function write_auxvalue_typetag!(mem::MutableMemView{UInt8}, bam_val)
+function write_auxvalue_typetag!(mem::MutableMemoryView{UInt8}, bam_val)
     type_tag = get_type_tag(typeof(bam_val))
     @inbounds mem[1] = type_tag
     if type_tag in (UInt8('C'), UInt8('c'))
@@ -315,7 +315,7 @@ function write_auxvalue_typetag!(mem::MutableMemView{UInt8}, bam_val)
             elseif type_tag in (UInt8('i'), UInt8('I'), UInt8('f'))
                 unsafe_store!(Ptr{UInt32}(ptr), htol(reinterpret(UInt32, bam_val)))
             elseif type_tag == UInt8('Z')
-                unsafe_copyto!(mem[2:end], ImmutableMemView(codeunits(bam_val)))
+                unsafe_copyto!(mem[2:end], ImmutableMemoryView(codeunits(bam_val)))
                 @inbounds mem[end] = 0x00
             elseif type_tag == UInt8('H')
                 m = @inbounds mem[2:end-1]

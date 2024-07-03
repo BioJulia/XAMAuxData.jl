@@ -2,7 +2,7 @@ module XAMAuxDataTests
 
 using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors
 using Test
-using MemViews: MemView
+using MemoryViews: MemoryView
 using FormatSpecimens
 using StringViews: StringView
 
@@ -99,7 +99,7 @@ end
 @testset "Writing" begin
     s = "AN:A:z\ta1:Z:abc def \tbc:H:a4e9\tkv:i:-25234\tzz:f:-14.466e-3\tAC:B:c,3,2,-34,25,62,-123"
     cu = codeunits(s)
-    mv = MemView(s)
+    mv = MemoryView(s)
     @test mv == cu
     mem = Memory{UInt8}(undef, length(cu))
     copyto!(mem, 1, mv, 1, length(mv))
@@ -124,7 +124,7 @@ end
         ]
             empty!(aux)
             aux["AB"] = i
-            @test String(MemView(aux)) == "AB:i:" * string(i)
+            @test String(MemoryView(aux)) == "AB:i:" * string(i)
             @test aux["AB"] === Int(i)
         end
 
@@ -151,7 +151,7 @@ end
             pi,
         ]
             aux["FL"] = i
-            @test String(MemView(aux)) == "xa:Z:some string!  \tFL:f:" * string(Float32(i))
+            @test String(MemoryView(aux)) == "xa:Z:some string!  \tFL:f:" * string(Float32(i))
             @test aux["FL"] === Float32(i)
         end
 
@@ -175,7 +175,7 @@ end
             StringView(collect(codeunits("lkwjdlkd"))),
         ])
             aux["S" * string(n)] = i
-            @test String(MemView(aux)) == "S" * string(n) * ":Z:" * String(i)
+            @test String(MemoryView(aux)) == "S" * string(n) * ":Z:" * String(i)
             @test aux["S" * string(n)] == i
             delete!(aux, "S" * string(n))
         end
@@ -201,7 +201,7 @@ end
             Base.AnnotatedChar('!', [:some=>1]),
         ]
             aux["k1"] = c
-            @test String(MemView(aux)) == "k1:A:" * Char(c)
+            @test String(MemoryView(aux)) == "k1:A:" * Char(c)
             @test aux["k1"] === Char(c)
             empty!(aux)
         end
@@ -224,7 +224,7 @@ end
         d1 = Dict{AuxTag, Any}("AZ" => 15, "pU" => "hello, world!", "xx" => Float32(1.1322))
         aux = SAM.Auxiliary(UInt8[], 1)
         merge!(aux, d1)
-        str = String(MemView(aux))
+        str = String(MemoryView(aux))
         d2 = Dict(SAM.Auxiliary(str))
         @test d1 == d2
     end
@@ -277,11 +277,11 @@ end
     s = "PG:Z:slfda\tkj:i:-2443\tHJ:A:p"
     aux = SAM.Auxiliary(collect(codeunits(s)), 1)
     delete!(aux, "kj")
-    @test String(MemView(aux)) == "PG:Z:slfda\tHJ:A:p"
+    @test String(MemoryView(aux)) == "PG:Z:slfda\tHJ:A:p"
     delete!(aux, "HJ")
-    @test String(MemView(aux)) == "PG:Z:slfda"
+    @test String(MemoryView(aux)) == "PG:Z:slfda"
     delete!(aux, "PG")
-    @test isempty(MemView(aux))
+    @test isempty(MemoryView(aux))
 end
 
 end # SAM
@@ -382,7 +382,7 @@ end
             @test aux["Xx"] === n
             buf = IOBuffer()
             write(buf, "Xx", INT_TYPE_TO_CHAR[typeof(n)], n)
-            @test String(MemView(aux)) == String(take!(buf))
+            @test String(MemoryView(aux)) == String(take!(buf))
         end
         empty!(aux)
         aux["KX"] = BigInt(340932)
@@ -405,7 +405,7 @@ end
             @test aux["KA"] === x
             buf = IOBuffer()
             write(buf, "KAf", x)
-            @test String(take!(buf)) == String(MemView(aux))
+            @test String(take!(buf)) == String(MemoryView(aux))
         end
     end
 
@@ -418,7 +418,7 @@ end
         ]
             aux["k1"] = c
             @test aux["k1"] === Char(c)
-            @test String(MemView(aux)) == "k1A" * Char(c)
+            @test String(MemoryView(aux)) == "k1A" * Char(c)
             empty!(aux)
         end
 
@@ -442,7 +442,7 @@ end
             ""
         ])
             aux["S" * string(n)] = i
-            @test String(MemView(aux)) == "S" * string(n) * "Z" * String(i) * '\0'
+            @test String(MemoryView(aux)) == "S" * string(n) * "Z" * String(i) * '\0'
             @test aux["S" * string(n)] == i
             delete!(aux, "S" * string(n))
         end
@@ -456,7 +456,7 @@ end
         aux = BAM.Auxiliary(UInt8[], 1)
         aux["LA"] = Hex([0x01, 0x02, 0x03, 0xaf])
         @test aux["LA"] == [0x01, 0x02, 0x03, 0xaf]
-        @test String(MemView(aux)) == "LAH010203AF\0"
+        @test String(MemoryView(aux)) == "LAH010203AF\0"
 
         aux = SAM.Auxiliary(b"JK:H:ae1bM9")
         @test aux["JK"] == Errors.InvalidHex
@@ -481,13 +481,13 @@ end
     @testset "Deletion" begin
         s = "pLdsryh352PGZslfda\0kji\4\0\0\0HJAp"
         aux = BAM.Auxiliary(collect(codeunits(s)), 11)
-        @test String(MemView(aux)) == "PGZslfda\0kji\4\0\0\0HJAp"
+        @test String(MemoryView(aux)) == "PGZslfda\0kji\4\0\0\0HJAp"
         delete!(aux, "kj")
-        @test String(MemView(aux)) == "PGZslfda\0HJAp"
+        @test String(MemoryView(aux)) == "PGZslfda\0HJAp"
         delete!(aux, "HJ")
-        @test String(MemView(aux)) == "PGZslfda\0"
+        @test String(MemoryView(aux)) == "PGZslfda\0"
         delete!(aux, "PG")
-        @test isempty(MemView(aux))
+        @test isempty(MemoryView(aux))
     end
 end
 
@@ -507,14 +507,14 @@ end # BAM
             aux["A1"] = view(v, 1:lastindex(v))
             @test aux["A1"] == v
             if T == SAM.Auxiliary
-                @test String(MemView(aux)) == "A1:B:" * INT_TYPE_TO_CHAR[eltype(v)] * ',' * join(map(string, v), ',')
+                @test String(MemoryView(aux)) == "A1:B:" * INT_TYPE_TO_CHAR[eltype(v)] * ',' * join(map(string, v), ',')
                 @test aux["A1"] isa Memory{eltype(v)}
             elseif T == BAM.Auxiliary
                 @test aux["A1"] isa AbstractVector{}
                 buf = IOBuffer()
                 write(buf, "A1B", INT_TYPE_TO_CHAR[eltype(v)], UInt32(length(v)))
                 write(buf, v)
-                @test String(MemView(aux)) == String(take!(buf))
+                @test String(MemoryView(aux)) == String(take!(buf))
             else
                 error()
             end
@@ -526,12 +526,12 @@ end # BAM
         v = BigInt[-234432212, 2441, 2423133]
         aux["P9"] = v
         if T == SAM.Auxiliary
-            @test String(MemView(aux)) == "P9:B:i,-234432212,2441,2423133"
+            @test String(MemoryView(aux)) == "P9:B:i,-234432212,2441,2423133"
             @test aux["P9"] isa Memory{Int32}
         elseif T == BAM.Auxiliary
             buf = IOBuffer()
             write(buf, "P9Bi", Int32(length(v)), Int32.(v))
-            @test String(MemView(aux)) == String(take!(buf))
+            @test String(MemoryView(aux)) == String(take!(buf))
         else
             error()
         end
