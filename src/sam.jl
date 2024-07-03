@@ -12,7 +12,7 @@ module SAM
 import ..AuxTag, ..AbstractAuxiliary, ..ELTYPE_DICT, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
 import ..DelimitedIterator, ..get_type_tag, ..Error, ..Errors, ..load_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
-import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException
+import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -114,6 +114,9 @@ struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
         new{ImmutableMemoryView{UInt8}}(mem, 1)
     end
 end
+
+striptype(::Type{<:Auxiliary}) = Auxiliary
+Base.empty(::Type{Auxiliary}) = Auxiliary(UInt8[], 1)
 
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 

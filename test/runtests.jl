@@ -1,6 +1,6 @@
 module XAMAuxDataTests
 
-using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors
+using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors, try_auxtag
 using Test
 using MemoryViews: MemoryView
 using FormatSpecimens
@@ -33,6 +33,14 @@ end
 
 @testset "AuxTag" begin
     @test AuxTag("ac") == AuxTag('a', 'c') == AuxTag(0x61, 0x63)
+    for good in ["AB", "A1", "a9", "w5"]
+        @test try_auxtag(good) isa AuxTag
+    end
+    for bad in ["", "A", "ABC", "A11", "5A", "AØ", "a!"]
+        @test try_auxtag(bad) === nothing
+    end
+
+    @test sort!(AuxTag.(["XA", "X1", "ab", "AB"])) == AuxTag.(["AB", "X1", "XA", "ab"])
 end
 
 @testset "SAM" begin
@@ -543,6 +551,24 @@ end # BAM
         @test aux["Kk"] == Float32.(mem)
     end
 
+    @testset "Arrays of non-basic types" begin
+        for T in [SAM.Auxiliary, BAM.Auxiliary]
+            aux = T(rand(UInt8, 10), 11)
+            inp = BigInt[20, -400, 102]
+            aux["AB"] = inp
+            outp = aux["AB"]
+            @test outp isa (T == SAM.Auxiliary ? Memory{Int32} : AbstractVector{Int32})
+            @test outp == inp
+
+            empty!(aux)
+            inp = [pi, MathConstants.e]
+            aux["KV"] = inp
+            outp = aux["KV"]
+            @test outp isa (T == SAM.Auxiliary ? Memory{Float32} : AbstractVector{Float32})
+            @test outp ≈ inp
+        end
+    end
+
     @testset "Bad arrays" begin
         for bad_eltype in [
             "W,1,2,3",
@@ -565,6 +591,46 @@ end # BAM
             aux = SAM.Auxiliary("AB:B:" * bad_array)
             @test aux["AB"] == Errors.InvalidArray
         end
+
+        for T in [SAM.Auxiliary, BAM.Auxiliary]
+            aux = T(UInt8[], 1)
+            @test_throws Exception aux["AB"] = Vector{Union{}}(undef, 3)
+        end
+    end
+end
+
+@testset "Various operations" begin
+    for T in [SAM.Auxiliary, BAM.Auxiliary]
+        aux = T(UInt8[], 1)
+        @test Dict(empty(T)) == Dict(aux)
+        @test length(aux) == 0
+        @test isempty(aux)
+        aux["k1"] = 1234
+        @test length(aux) == 1
+        @test !isempty(aux)
+        aux["v9"] = 'w'
+        @test length(aux) == 2
+        aux["AA"] = Int16[-500, 205, 1]
+        @test length(aux) == 3
+
+        for k in ["k1", "v9", "AA"]
+            @test haskey(aux, k)
+        end
+        @test collect(keys(aux)) == AuxTag.(["k1", "v9", "AA"])
+        for k in ["k2", "v7", "BB", "c1"]
+            @test !haskey(aux, k)
+        end
+
+        cp = copy(aux)
+        d = Dict(aux)
+        @test d == Dict(cp)
+        len = 3
+        for k in ["k1", "v9", "AA"]
+            delete!(aux, k)
+            len -= 1
+            @test length(aux) == len
+        end
+        @test Dict(cp) == d
     end
 end
 

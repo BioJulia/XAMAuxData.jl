@@ -176,7 +176,8 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
 - ¶ These are stored as `Int32` and `UInt32` for `Signed` and `Unsigned`, respectively.
 
 ### BAM element types
-The only different between SAM and BAM types is that the latter format permits different types of integers.
+#### BAM integers
+The main difference between SAM and BAM types is that the latter format permits different types of integers.
 Hence, except the types mentioned below, all the SAM types in the table above are also supported in BAM,
 with the same Julia <-> BAM type correspondance.
 Further, reading a value of `i` will return an `Int32` instead of an `Int`.
@@ -189,6 +190,17 @@ Further, reading a value of `i` will return an `Int32` instead of an `Int`.
 | `Int16`    | `s`      | `Int16`        |
 | `Unsigned` | `I`      | `UInt32`       |
 | `Signed`   | `i`      | `Int32`        |
+
+#### BAM Arrays
+Whereas reading a SAM array (type `B`) will result in a `Memory`, BAM arrays only promise
+that they return an `AbstractVector` of the correct element type:
+
+```jldoctest
+julia> aux = BAM.Auxiliary("ABBs\2\0\0\0\1\2\3\4");
+
+julia> aux["AB"] isa AbstractVector{Int16}
+true
+```
 
 ### The `Hex` type
 The SAM/BAM type `H` signifies a hex-encoded byte array.

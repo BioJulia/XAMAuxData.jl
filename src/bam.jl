@@ -4,6 +4,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..Hex
 import ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..ELTYPE_DICT, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
+import ..striptype
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -77,6 +78,9 @@ struct Auxiliary{T} <: AbstractAuxiliary{T}
         new{ImmutableMemoryView{UInt8}}(mem, 1)
     end
 end
+
+striptype(::Type{<:Auxiliary}) = Auxiliary
+Base.empty(::Type{Auxiliary}) = Auxiliary(UInt8[], 1)
 
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 

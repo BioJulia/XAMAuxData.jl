@@ -73,10 +73,6 @@ get_type_tag(::Type{<:AbstractString}) = UInt8('Z')
 get_type_tag(::Type{<:AbstractVector}) = UInt8('B')
 get_type_tag(::Type{<:Hex}) = UInt8('H')
 
-function as_aux_type(T::Type{<:AUX_NUMBER_TYPES})
-    T != Union{} ? T : error("Cannot convert Union{} to XAM-compatible type")
-end
-
 as_aux_type(::Type{<:Real}) = Float32
 as_aux_type(::Type{<:Integer}) = Int32
 
@@ -170,6 +166,7 @@ function Base.isvalid(aux::AbstractAuxiliary)
     all(i -> !isa(i, Error), iter_encodings(aux))
 end
 
+function striptype end
 function Base.copy(aux::AbstractAuxiliary)
     x = aux.x
     v = if x isa Vector{UInt8}
@@ -177,10 +174,8 @@ function Base.copy(aux::AbstractAuxiliary)
     else
         copy(MemoryView(aux))
     end
-    typeof(aux)(v, 1)
+    striptype(typeof(aux))(v, 1)
 end
-
-Base.empty(T::Type{<:AbstractAuxiliary{V}}) where V = T(empty(V), 1)
 
 function Base.length(aux::AbstractAuxiliary)::Int
     n = 0
