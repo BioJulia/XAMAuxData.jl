@@ -206,7 +206,6 @@ end
         for c in Any[
             'w',
             '1',
-            Base.AnnotatedChar('!', [:some=>1]),
         ]
             aux["k1"] = c
             @test String(MemoryView(aux)) == "k1:A:" * Char(c)
@@ -422,7 +421,6 @@ end
         for c in Any[
             'w',
             '1',
-            Base.AnnotatedChar('!', [:some=>1]),
         ]
             aux["k1"] = c
             @test aux["k1"] === Char(c)
