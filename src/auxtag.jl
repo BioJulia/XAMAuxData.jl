@@ -71,10 +71,10 @@ function try_auxtag(x::Union{String, SubString{String}})
     try_auxtag(cu1, cu2)
 end
 
-function try_auxtag(x::AbstractString)
-    (x, s) = @something iterate(x) return nothing
-    (y, s) = @something iterate(x, s) return nothing
-    isnothing(iterate(x, s)) || return nothing
+function try_auxtag(str::AbstractString)
+    (x, s) = @something iterate(str) return nothing
+    (y, s) = @something iterate(str, s) return nothing
+    isnothing(iterate(str, s)) || return nothing
     try_auxtag(Char(x)::Char, Char(y)::Char)
 end
 

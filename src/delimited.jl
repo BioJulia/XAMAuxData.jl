@@ -11,7 +11,7 @@ end
 
 function DelimitedIterator(x, d::T) where {T}
     v = ImmutableMemoryView(x)
-    eltype(v) == T || error("MemoryView(x) must be of eltype T") # TODO
+    eltype(v) == T || error("MemoryView element type is different from delimiter type")
     DelimitedIterator{T}(v, d)
 end
 
