@@ -1,7 +1,7 @@
 ```@meta
 CurrentModule = XAMAuxData
 DocTestSetup = quote
-    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error
+    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error, is_well_formed
     using MemoryViews: MemoryView
 end
 ```
@@ -19,7 +19,9 @@ Any differences to the BAM format will be explicitly mentioned.
 
 !!! note
     Annoyingly, the specification of GFA auxiliary fields differ slightly from that of SAM
-    auxiliary fields. Hence, in the future, a dedicated GFA module may be introduced.
+    auxiliary fields.
+    Currently, this package implements only the SAM specification, and as such does not
+    fully support GFA files. In the future, a dedicated GFA module may be introduced.
 
 The single auxiliary field `AN:i:1234` is encoded as the key-value pair `AuxTag("AN") => 1234`.
 A collection of aux fields are represented by a `SAM.Auxiliary` (or `BAM.Auxiliary`), which are subtypes of `AbstractDict{AuxTag, Any}`.
@@ -101,7 +103,7 @@ false
 ```
 
 ## Manipulating `Auxiliary` objects
-`Auxiliary`'s can be read and written like a normal `AbstractDict{AuxTag, Any}`:
+`Auxiliary`s can be read and written like a normal `AbstractDict{AuxTag, Any}`:
 
 ```jldoctest
 julia> aux = SAM.Auxiliary(UInt8[], 1); # empty Auxiliary
@@ -255,4 +257,43 @@ println(
 # output
 true
 
+```
+
+## Invalid data in `Auxiliaries`
+The elements of an `Auxiliary` are lazily loaded, and in the interest of speed,
+there is no mandatory validation of the data done when constructing an `Auxiliary`.
+Hence, they may contain invalid data.
+This package distinguishes two different kinds of bad data:
+
+1. If the data is malformed in such a way that it's not possible to identify
+   the keys of the auxiliary, or the data segment of the corresponding values,
+   we say the auxiliary is malformed.
+   Loading keys or values from malformed auxiliaries _may_ throw an exception.
+   The function [`is_well_formed`](@ref) can be used to check for malformed auxiliaries.
+
+2. If the keys and the data segments corresponding to the values _can_ be identified,
+   but the data itself is corrupt such that the values cannot be loaded, we instead
+   say the auxiliary is invalid.
+   Loading an invalid value return an object of type [`Error`](@ref).
+   The validity of an auxiliary can be checked with `isvalid`.
+   All valid records are also well-formed.
+
+For example:
+```jldoctest
+julia> # This is completely mangled
+
+julia> aux = SAM.Auxiliary("erwlifju093");
+
+julia> (is_well_formed(aux), isvalid(aux))
+(false, false)
+
+julia> # Keys and values can be identified, but data can't be loaded as an integer
+
+julia> aux = SAM.Auxiliary("AB:i:dslkjas");
+
+julia> (is_well_formed(aux), isvalid(aux))
+(true, false)
+
+julia> only(values(aux)) isa Error
+true
 ```

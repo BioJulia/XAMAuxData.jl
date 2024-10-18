@@ -10,9 +10,10 @@ module SAM
 # Default Julia methods throw with bad keys, but not bad values (which are simply an error value)
 
 import ..AuxTag, ..AbstractAuxiliary, ..ELTYPE_DICT, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
-import ..DelimitedIterator, ..get_type_tag, ..Error, ..Errors, ..load_hex
+import ..DelimitedIterator, ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
+import ..is_well_formed
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -29,13 +30,14 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
     (mem, newstate) = itval
     parsed = parse_encoded_aux(mem)
     parsed isa Error && return (parsed, length(it.x.v) + 1)
-    (tag, eltype, span) = parsed
-    ((tag, eltype, span .+ (state - 1)), newstate)
+    (tag, eltype) = parsed
+    span = 5 + state:lastindex(mem) + state - 1
+    ((tag, eltype, span), newstate)
 end
 
 function parse_encoded_aux(
     mem::ImmutableMemoryView{UInt8},
-)::Union{Tuple{AuxTag, UInt8, UnitRange{Int}}, Error}
+)::Union{Tuple{AuxTag, UInt8}, Error}
     length(mem) < 5 && return Errors.TooShortMemory
     t1 = @inbounds mem[1]
     t2 = @inbounds mem[2]
@@ -43,7 +45,7 @@ function parse_encoded_aux(
     isnothing(tag) && return Errors.InvalidAuxTag
     (@inbounds mem[3] == mem[5] == UInt8(':')) || return Errors.NoColons
     eltype = @inbounds mem[4]
-    (tag, eltype, 6:lastindex(mem))
+    (tag, eltype)
 end
 
 """
@@ -68,35 +70,10 @@ true
 ```
 
 # Extended help
-Since fields of `Auxiliary` are lazily loaded, it may contain invalid data.
-This package distinguishes two ways of being invalid: If the data does not conform
-to tab-separated fields of `AB:X:Z`, iterating the `Auxiliary` or accessing fields
-will error, and the whole `Auxiliary` is considered invalid.
-Use `isvalid` to check if this is the case.
-Alternatively, if the _value_ `Z` is invalid, the `Auxiliary` can be iterated and
-indexed, but that value will be returned as a value of [`Error`](@ref).
-
-See also: `isvalid`, [`Error`](@ref)
-
-# Examples
-```jldoctest
-julia> invalid = SAM.Auxiliary("KV:A<P");
-
-julia> isvalid(invalid)
-false
-
-julia> invalid["KV"]
-ERROR: Invalid SAM tag header. Expected <AuxTag>:<type tag>:, but found no colons.
-[...]
-
-julia> valid_badvalue = SAM.Auxiliary("KV:A:\f");
-
-julia> isvalid(valid_badvalue)
-true
-
-julia> valid_badvalue["KV"] isa Error
-true
-```
+Since fields of `Auxiliary` are lazily loaded, auxiliaries may contain invalid
+data even after successful construction.
+`Auxiliary` operates with two distinct notions of invalid data - malformedness
+and invalidness. See [`is_well_formed`](@ref) for their definitions.
 """
 struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     x::T
@@ -157,6 +134,17 @@ function Base.get(aux::Auxiliary, k, default)
     default
 end
 
+function Base.isvalid(aux::Auxiliary)
+    it = iter_encodings(aux)
+    for i in it
+        i isa Error && return false
+        (_, eltype, span) = i
+        mem = it.x.v[span]
+        validate_encoding(eltype, mem) || return false
+    end
+    true
+end
+
 function load_array(mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
     isempty(mem) && return Errors.InvalidArrayEltype
     eltype_tag = @inbounds mem[1]
@@ -169,7 +157,7 @@ function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Err
     isempty(mem) && return Memory{T}()
     length(mem) == 1 && return Errors.InvalidArray
     len = count(==(UInt8(',')), mem)
-    mem[1] == UInt8(',') || return Errors.InvalidArray
+    @inbounds(mem[1]) == UInt8(',') || return Errors.InvalidArray
     res = Memory{T}(undef, len)
     n = 0
     for ele_mem in DelimitedIterator(@inbounds(mem[2:end]), UInt8(','))
@@ -180,6 +168,43 @@ function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Err
 
     end
     res
+end
+
+function validate_array(mem::ImmutableMemoryView{UInt8})::Bool
+    isempty(mem) && return false
+    eltype_tag = @inbounds mem[1]
+    eltype = get(ELTYPE_DICT, eltype_tag, nothing)
+    isnothing(eltype) && return false
+    validate_array(eltype, @inbounds mem[2:end])
+end
+
+function validate_array(T::Type, mem::ImmutableMemoryView{UInt8})::Bool
+    isempty(mem) && return true
+    length(mem) == 1 && return false
+    @inbounds(mem[1]) == UInt8(',') || return false
+    all(DelimitedIterator(@inbounds(mem[2:end]), UInt8(','))) do bytes
+        !isnothing(tryparse(T, bytes))
+    end
+end
+
+function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bool
+    if type_tag == UInt8('A')
+        length(mem) == 1 || return false
+        b = @inbounds mem[1]
+        is_printable_char(b)
+    elseif type_tag == UInt8('i')
+        tryparse(Int, StringView(mem); base=10) !== nothing
+    elseif type_tag == UInt8('f')
+        tryparse(Float32, StringView(mem)) !== nothing
+    elseif type_tag == UInt8('Z')
+        is_printable(mem)
+    elseif type_tag == UInt8('H')
+        validate_hex(mem)
+    elseif type_tag == UInt8('B')
+        validate_array(mem)
+    else
+        false
+    end
 end
 
 function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})

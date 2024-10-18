@@ -6,7 +6,7 @@ using StringViews: StringView
 struct Unsafe end
 const unsafe = Unsafe()
 
-export Hex, AuxTag, SAM, BAM
+export Hex, AuxTag, SAM, BAM, is_well_formed
 public Errors, Error
 
 # These are the numerical types supported by the BAM format.
@@ -129,42 +129,6 @@ function is_printable(v::AbstractVector{UInt8})
 end
 
 abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
-
-"""
-    isvalid(aux::Auxiliary) -> Bool
-
-Check if the keys of `aux` are valid. Valid `aux` can be iterated
-and accessed without throwing an exception.
-Invalid `aux` has at least one key/value pair which will error when
-accessed.
-This function does _not_ validate if the values of `aux` are well-formatted,
-a valid `Auxiliary` may return an `Errors.Error` when accessed.
-To check if all values of `aux` is valid, use
-`isvalid(aux) && all(i -> !isa(i, SAM.Error), values(aux))`.
-
-# Examples
-```jldoctest
-julia> aux = BAM.Auxiliary("KLZab\\t\\0ABCF");
-
-julia> isvalid(aux)
-true
-
-julia> aux["KL"] == Errors.InvalidString
-true
-
-julia> aux = BAM.Auxiliary("KLZab\\tABCF");
-
-julia> isvalid(aux)
-false
-
-julia> aux["KL"]
-ERROR: BAM string or Hex type not terminated by null byte
-[...]
-```
-"""
-function Base.isvalid(aux::AbstractAuxiliary)
-    all(i -> !isa(i, Error), iter_encodings(aux))
-end
 
 function striptype end
 function Base.copy(aux::AbstractAuxiliary)
@@ -332,6 +296,86 @@ function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
     hex
 end
 
+"""
+    is_well_formed(aux::AbstractAuxiliary) -> Bool
+
+Check if the auxiliary is well formed.
+`AbstractAuxiliary` distinguishes two ways their data can be incorrect:
+If the data is corrupted such that it is not possible to identify the key, or
+start/end of the encoded data of the value for a key/value pair, we say the
+auxiliary is malformed.
+Accessing values, or iterating such an auxiliary may or may not throw an exception.
+This notion of malformedness is what this function checks for.
+
+Alternatively, if the keys and encoded values _can_ be identified, but the encoded
+values are corrupt and the value cannot be loaded, we say the auxiliary is invalid.
+Such auxiliaries can be iterated over, and the values can be loaded, although the
+loaded value will be of type [`XAMAuxData.Error`](@ref).
+This can be checked for with `isvalid`.
+Valid auxiliaries are always well-formed.
+
+# Examples
+```jldoctest
+julia> aux = SAM.Auxiliary("KM:i:252\\tAK::C"); # bad key
+
+julia> is_well_formed(aux)
+false
+
+julia> aux["KM"] # loading a value may error
+252
+
+julia> aux["AK"] # loading a value may error
+ERROR: Invalid SAM tag header. Expected <AuxTag>:<type tag>:, but found no colons.
+[...]
+
+julia> aux = SAM.Auxiliary("AB:Z:αβγδ\\tCD:f:-1.2"); # bad value encoding
+
+julia> (is_well_formed(aux), isvalid(aux))
+(true, false)
+
+julia> aux["AB"] # note: numerical value of enum is not API
+InvalidString::Error = 9
+```
+"""
+function is_well_formed(it::AbstractAuxiliary)
+    all(iter_encodings(it)) do i
+        !isa(i, Error)
+    end
+end
+
+"""
+    isvalid(aux::AbstractAuxiliary) -> Bool
+
+Check if the auxiliary is well formed, and that all the values can be loaded
+without returning an [`XAMAuxData.Error`](@ref).
+
+# Examples
+```jldoctest
+julia> aux = SAM.Auxiliary("AB:i:not an integer");
+
+julia> is_well_formed(aux)
+true
+
+julia> isvalid(aux)
+false
+```
+
+See also: [`is_well_formed`](@ref)
+"""
+Base.isvalid(x::AbstractAuxiliary) = throw(MethodError(isvalid, (x,)))
+
+function validate_hex(mem::ImmutableMemoryView{UInt8})::Bool
+    len = length(mem)
+    iseven(len) || return false
+    good = true
+    for byte in mem
+        good &= byte in UInt8('0'):UInt8('9') ||
+        byte in UInt8('a'):UInt8('h') ||
+        byte in UInt8('A'):UInt8('H')
+    end
+    good
+end
+
 function pack_hex(a::UInt8)::UInt8 # 0xff for bad hex
     if a ∈ 0x30:0x39
         a - 0x30
@@ -345,7 +389,7 @@ function pack_hex(a::UInt8)::UInt8 # 0xff for bad hex
 end
 
 function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)
-    if isvalid(x)
+    if is_well_formed(x)
         buf = IOBuffer()
         println(buf, length(x), "-element ", typeof(x), ':')
         content = IOContext(buf, :limit => true, :compact => true)
@@ -359,7 +403,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)
         end
         write(io, take!(buf)[1:end-1]) # remove trailing newline
     else
-        print(io, "Invalid ", typeof(x))
+        print(io, "Malformed ", typeof(x))
     end
 end
 

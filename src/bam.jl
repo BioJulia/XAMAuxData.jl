@@ -4,7 +4,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..Hex
 import ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..ELTYPE_DICT, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
-import ..striptype
+import ..striptype, ..validate_hex, ..is_well_formed
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -33,34 +33,11 @@ true
 ```
 
 # Extended help
-Since fields of `Auxiliary` are lazily loaded, it may contain invalid data.
-This package distinguishes two ways of being invalid: If the data does not conform
-to tab-separated fields of `AB:X:Z`, iterating the `Auxiliary` or accessing fields
-will error, and the whole `Auxiliary` is considered invalid.
-Use isvalid to check if this is the case.
-Alternatively, if the _value_ `Z` is invalid, the `Auxiliary` can be iterated and
-indexed, but that value will be returned as a value of [`Error`](@ref).
-
-See also: [`Error`](@ref)
-
-# Examples
-```jldoctest
-julia> invalid = BAM.Auxiliary("KVXA");
-
-julia> isvalid(invalid)
-false
-
-julia> invalid["KV"]
-ERROR: Unknown type tag in aux value.
-[...]
-
-julia> valid_badvalue = BAM.Auxiliary("KVA\f");
-
-julia> isvalid(valid_badvalue)
-true
-
-julia> valid_badvalue["KV"] isa Error
-true
+# Extended help
+Since fields of `Auxiliary` are lazily loaded, auxiliaries may contain invalid
+data even after successful construction.
+`Auxiliary` operates with two distinct notions of invalid data - malformedness
+and invalidness. See [`is_well_formed`](@ref) for their definitions.
 ```
 """
 struct Auxiliary{T} <: AbstractAuxiliary{T}
@@ -110,6 +87,38 @@ struct EncodedIterator <: AbstractEncodedIterator
 end
 
 iter_encodings(aux::Auxiliary) = EncodedIterator(ImmutableMemoryView(aux))
+
+function Base.isvalid(aux::Auxiliary)
+    it = iter_encodings(aux)
+    for i in it
+        i isa Error && return false
+        (_, eltype, span) = i
+        mem = it.mem[span]
+        validate_encoding(eltype, mem) || return false
+    end
+    true
+end
+
+function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bool
+    if type_tag == UInt8('A')
+        length(mem) == 1 || return false
+        b = @inbounds mem[1]
+        is_printable_char(b)
+    # Binary numbers, or arrays of binary numbers cannot be invalid
+    elseif type_tag in (UInt8('c'), UInt8('C'), UInt8('s'), UInt8('S'), UInt8('I'), UInt8('i'), UInt8('f'), UInt8('B'))
+        true
+    elseif type_tag == UInt8('H')
+        zeropos = findnext(iszero, mem, 1)
+        isnothing(zeropos) && return false
+        validate_hex(mem[1:zeropos-1])
+    elseif type_tag == UInt8('Z')
+        zeropos = findnext(iszero, mem, 1)
+        isnothing(zeropos) && return false
+        is_printable(mem[1:zeropos-1])
+    else
+        false
+    end
+end
 
 function Base.iterate(it::EncodedIterator, state::Int=1)
     mem = it.mem
