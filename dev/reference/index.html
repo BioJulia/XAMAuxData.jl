@@ -27,55 +27,34 @@ julia&gt; immut[&quot;KJ&quot;]
 -1
 
 julia&gt; haskey(immut, &quot;AB&quot;)
-true</code></pre><p><strong>Extended help</strong></p><p>Since fields of <code>Auxiliary</code> are lazily loaded, it may contain invalid data. This package distinguishes two ways of being invalid: If the data does not conform to tab-separated fields of <code>AB:X:Z</code>, iterating the <code>Auxiliary</code> or accessing fields will error, and the whole <code>Auxiliary</code> is considered invalid. Use <code>isvalid</code> to check if this is the case. Alternatively, if the <em>value</em> <code>Z</code> is invalid, the <code>Auxiliary</code> can be iterated and indexed, but that value will be returned as a value of <a href="#XAMAuxData.Errors.Error"><code>Error</code></a>.</p><p>See also: <code>isvalid</code>, <a href="#XAMAuxData.Errors.Error"><code>Error</code></a></p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; invalid = SAM.Auxiliary(&quot;KV:A&lt;P&quot;);
-
-julia&gt; isvalid(invalid)
-false
-
-julia&gt; invalid[&quot;KV&quot;]
-ERROR: Invalid SAM tag header. Expected &lt;AuxTag&gt;:&lt;type tag&gt;:, but found no colons.
-[...]
-
-julia&gt; valid_badvalue = SAM.Auxiliary(&quot;KV:A:&quot;);
-
-julia&gt; isvalid(valid_badvalue)
-true
-
-julia&gt; valid_badvalue[&quot;KV&quot;] isa Error
-true</code></pre></div></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="XAMAuxData.BAM.Auxiliary" href="#XAMAuxData.BAM.Auxiliary"><code>XAMAuxData.BAM.Auxiliary</code></a> — <span class="docstring-category">Type</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">BAM.Auxiliary{T &lt;: AbstractVector{UInt8}} &lt;: AbstractDict{AuxTag, Any}</code></pre><p>Lazily loaded <code>AbstractDict</code> representing the auxiliary data fields of a BAM record. Immutable aux&#39;s can be constructed with <code>Auxiliary(x)</code> for any <code>x</code> with <code>MemoryView(x)</code> defined. Mutable aux data is constructed with <code>Auxiliary(x::Vector{UInt8}, start::Int)</code>, where <code>start</code> gives the first index of the used data in <code>x</code> - all data before <code>start</code> will be ignored and never modified.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; immut = BAM.Auxiliary(&quot;KJS\0ABZabc\0&quot;);
+true</code></pre><p><strong>Extended help</strong></p><p>Since fields of <code>Auxiliary</code> are lazily loaded, auxiliaries may contain invalid data even after successful construction. <code>Auxiliary</code> operates with two distinct notions of invalid data - malformedness and invalidness. See <a href="#XAMAuxData.is_well_formed"><code>is_well_formed</code></a> for their definitions.</p></div></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="XAMAuxData.BAM.Auxiliary" href="#XAMAuxData.BAM.Auxiliary"><code>XAMAuxData.BAM.Auxiliary</code></a> — <span class="docstring-category">Type</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">BAM.Auxiliary{T &lt;: AbstractVector{UInt8}} &lt;: AbstractDict{AuxTag, Any}</code></pre><p>Lazily loaded <code>AbstractDict</code> representing the auxiliary data fields of a BAM record. Immutable aux&#39;s can be constructed with <code>Auxiliary(x)</code> for any <code>x</code> with <code>MemoryView(x)</code> defined. Mutable aux data is constructed with <code>Auxiliary(x::Vector{UInt8}, start::Int)</code>, where <code>start</code> gives the first index of the used data in <code>x</code> - all data before <code>start</code> will be ignored and never modified.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; immut = BAM.Auxiliary(&quot;KJS\0ABZabc\0&quot;);
 
 julia&gt; immut[&quot;KJ&quot;]
 0x0007
 
 julia&gt; haskey(immut, &quot;AB&quot;)
-true</code></pre><p><strong>Extended help</strong></p><p>Since fields of <code>Auxiliary</code> are lazily loaded, it may contain invalid data. This package distinguishes two ways of being invalid: If the data does not conform to tab-separated fields of <code>AB:X:Z</code>, iterating the <code>Auxiliary</code> or accessing fields will error, and the whole <code>Auxiliary</code> is considered invalid. Use isvalid to check if this is the case. Alternatively, if the <em>value</em> <code>Z</code> is invalid, the <code>Auxiliary</code> can be iterated and indexed, but that value will be returned as a value of <a href="#XAMAuxData.Errors.Error"><code>Error</code></a>.</p><p>See also: <a href="#XAMAuxData.Errors.Error"><code>Error</code></a></p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; invalid = BAM.Auxiliary(&quot;KVXA&quot;);
+true</code></pre><p><strong>Extended help</strong></p><p><strong>Extended help</strong></p><p>Since fields of <code>Auxiliary</code> are lazily loaded, auxiliaries may contain invalid data even after successful construction. <code>Auxiliary</code> operates with two distinct notions of invalid data - malformedness and invalidness. See <a href="#XAMAuxData.is_well_formed"><code>is_well_formed</code></a> for their definitions. ```</p></div></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="XAMAuxData.is_well_formed" href="#XAMAuxData.is_well_formed"><code>XAMAuxData.is_well_formed</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">is_well_formed(aux::AbstractAuxiliary) -&gt; Bool</code></pre><p>Check if the auxiliary is well formed. <code>AbstractAuxiliary</code> distinguishes two ways their data can be incorrect: If the data is corrupted such that it is not possible to identify the key, or start/end of the encoded data of the value for a key/value pair, we say the auxiliary is malformed. Accessing values, or iterating such an auxiliary may or may not throw an exception. This notion of malformedness is what this function checks for.</p><p>Alternatively, if the keys and encoded values <em>can</em> be identified, but the encoded values are corrupt and the value cannot be loaded, we say the auxiliary is invalid. Such auxiliaries can be iterated over, and the values can be loaded, although the loaded value will be of type <a href="#XAMAuxData.Errors.Error"><code>XAMAuxData.Error</code></a>. This can be checked for with <code>isvalid</code>. Valid auxiliaries are always well-formed.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; aux = SAM.Auxiliary(&quot;KM:i:252\tAK::C&quot;); # bad key
 
-julia&gt; isvalid(invalid)
+julia&gt; is_well_formed(aux)
 false
 
-julia&gt; invalid[&quot;KV&quot;]
-ERROR: Unknown type tag in aux value.
+julia&gt; aux[&quot;KM&quot;] # loading a value may error
+252
+
+julia&gt; aux[&quot;AK&quot;] # loading a value may error
+ERROR: Invalid SAM tag header. Expected &lt;AuxTag&gt;:&lt;type tag&gt;:, but found no colons.
 [...]
 
-julia&gt; valid_badvalue = BAM.Auxiliary(&quot;KVA&quot;);
+julia&gt; aux = SAM.Auxiliary(&quot;AB:Z:αβγδ\tCD:f:-1.2&quot;); # bad value encoding
 
-julia&gt; isvalid(valid_badvalue)
+julia&gt; (is_well_formed(aux), isvalid(aux))
+(true, false)
+
+julia&gt; aux[&quot;AB&quot;] # note: numerical value of enum is not API
+InvalidString::Error = 9</code></pre></div></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Base.isvalid-Tuple{XAMAuxData.AbstractAuxiliary}" href="#Base.isvalid-Tuple{XAMAuxData.AbstractAuxiliary}"><code>Base.isvalid</code></a> — <span class="docstring-category">Method</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">isvalid(aux::AbstractAuxiliary) -&gt; Bool</code></pre><p>Check if the auxiliary is well formed, and that all the values can be loaded without returning an <a href="#XAMAuxData.Errors.Error"><code>XAMAuxData.Error</code></a>.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; aux = SAM.Auxiliary(&quot;AB:i:not an integer&quot;);
+
+julia&gt; is_well_formed(aux)
 true
-
-julia&gt; valid_badvalue[&quot;KV&quot;] isa Error
-true</code></pre></div></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Base.isvalid-Tuple{XAMAuxData.AbstractAuxiliary}" href="#Base.isvalid-Tuple{XAMAuxData.AbstractAuxiliary}"><code>Base.isvalid</code></a> — <span class="docstring-category">Method</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">isvalid(aux::Auxiliary) -&gt; Bool</code></pre><p>Check if the keys of <code>aux</code> are valid. Valid <code>aux</code> can be iterated and accessed without throwing an exception. Invalid <code>aux</code> has at least one key/value pair which will error when accessed. This function does <em>not</em> validate if the values of <code>aux</code> are well-formatted, a valid <code>Auxiliary</code> may return an <code>Errors.Error</code> when accessed. To check if all values of <code>aux</code> is valid, use <code>isvalid(aux) &amp;&amp; all(i -&gt; !isa(i, SAM.Error), values(aux))</code>.</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl hljs">julia&gt; aux = BAM.Auxiliary(&quot;KLZab\t\0ABCF&quot;);
 
 julia&gt; isvalid(aux)
-true
-
-julia&gt; aux[&quot;KL&quot;] == Errors.InvalidString
-true
-
-julia&gt; aux = BAM.Auxiliary(&quot;KLZab\tABCF&quot;);
-
-julia&gt; isvalid(aux)
-false
-
-julia&gt; aux[&quot;KL&quot;]
-ERROR: BAM string or Hex type not terminated by null byte
-[...]</code></pre></div></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Thursday 17 October 2024 18:27">Thursday 17 October 2024</span>. Using Julia version 1.12.0-DEV.1416.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+false</code></pre><p>See also: <a href="#XAMAuxData.is_well_formed"><code>is_well_formed</code></a></p></div></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Friday 18 October 2024 09:19">Friday 18 October 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
