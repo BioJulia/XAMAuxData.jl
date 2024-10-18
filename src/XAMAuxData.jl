@@ -11,6 +11,7 @@ public Errors, Error
 
 # These are the numerical types supported by the BAM format.
 const AUX_NUMBER_TYPES = Union{Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32}
+const BIT_INTEGERS = Union{UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, Int64, UInt128, Int128}
 
 include("auxtag.jl")
 
@@ -80,11 +81,20 @@ function as_aux_value end
 as_sam_aux_value(x) = as_aux_value(x)
 as_bam_aux_value(x) = as_aux_value(x)
 
-as_aux_value(x::Real) = Float32(x)::Float32
+as_aux_value(x::Float32) = x
+as_aux_value(x::Float16) = Float32(x)
 
-function as_aux_value(x::AbstractChar)::Union{Char, Error}
+function as_aux_value(x::Real)
+    f = Float32(x)
+    if !isinf(x) & isinf(f)
+        throw(AuxException(Errors.InvalidFloat))
+    end
+    f
+end
+
+function as_aux_value(x::AbstractChar)::Char
     c = Char(x)::Char
-    isascii(c) ? c : throw(AuxException(Errors.InvalidChar))
+    is_printable_char(c) ? c : throw(AuxException(Errors.InvalidChar))
 end
 
 as_aux_value(x::Hex) = x
@@ -180,6 +190,7 @@ const ELTYPE_DICT = Dict(
 )
 
 is_printable_char(x::UInt8) = in(x, UInt8('!'):UInt8('~'))
+is_printable_char(c::Char) = '!' ≤ c ≤ '~'
 
 """
     Errors

@@ -266,8 +266,9 @@ function bytes_needed(x::AbstractVector{<:AUX_NUMBER_TYPES})
 end
 
 as_bam_aux_value(x::AUX_NUMBER_TYPES) = x
-as_bam_aux_value(x::Signed) = Int32(x)
-as_bam_aux_value(x::Unsigned) = UInt32(x)
+
+as_bam_aux_value(x::Signed) = Int32(x)::Int32
+as_bam_aux_value(x::Unsigned) = UInt32(x)::UInt32
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
     key = convert(AuxTag, k)

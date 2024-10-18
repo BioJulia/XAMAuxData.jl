@@ -6,7 +6,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..ELTYPE_DICT, ..is_printable_char, ..is_p
 import ..DelimitedIterator, ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
-import ..is_well_formed
+import ..is_well_formed, ..BIT_INTEGERS
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -223,7 +223,21 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
     end
 end
 
-as_sam_aux_value(x::Integer) = Int32(x)::Int32
+function as_sam_aux_value(x::Integer)::Int32
+    try
+        return Int32(x)::Int32
+    catch
+        throw(AuxException(Errors.InvalidInt))
+    end
+end
+
+function as_sam_aux_value(x::BIT_INTEGERS)::Int32
+    if (x < typemin(Int32)) | (x > typemax(Int32))
+        throw(AuxException(Errors.InvalidInt))
+    else
+        x % Int32
+    end
+end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, key::AuxTag)
     v = as_sam_aux_value(val)
