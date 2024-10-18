@@ -35,9 +35,11 @@ end
     @test AuxTag("ac") == AuxTag('a', 'c') == AuxTag(0x61, 0x63)
     for good in ["AB", "A1", "a9", "w5"]
         @test try_auxtag(good) isa AuxTag
+        @test try_auxtag(Test.GenericString(good)) isa AuxTag
     end
     for bad in ["", "A", "ABC", "A11", "5A", "AØ", "a!"]
         @test try_auxtag(bad) === nothing
+        @test try_auxtag(Test.GenericString(bad)) === nothing
     end
 
     @test sort!(AuxTag.(["XA", "X1", "ab", "AB"])) == AuxTag.(["AB", "X1", "XA", "ab"])
@@ -81,6 +83,19 @@ end
 
     aux = SAM.Auxiliary("ka:i:-13\thc:w:1234")
     @test aux["hc"] == Errors.InvalidTypeTag
+end
+
+@testset "Display" begin
+    aux = SAM.Auxiliary("AB:i:242\tkV:Z:abcdef gh \tJJ:A:!\tzZ:f:-1.2")
+    buf = IOBuffer()
+    show(buf, MIME"text/plain"(), aux)
+    str = String(take!(buf))
+    @test str == """
+    4-element XAMAuxData.SAM.Auxiliary{MemoryViews.ImmutableMemoryView{UInt8}}:
+      "AB" => 242
+      "kV" => "abcdef gh "
+      "JJ" => '!'
+      "zZ" => -1.2f0"""
 end
 
 @testset "Mutating" begin
@@ -338,6 +353,19 @@ end # SAM
         @test v == arr
         @test eltype(v) == et
     end
+end
+
+@testset "Display" begin
+    aux = BAM.Auxiliary("ABS\0\xf2kVZabcdef gh \0JJA!zZf\x9a\x99\x99\xbf")
+    buf = IOBuffer()
+    show(buf, MIME"text/plain"(), aux)
+    str = String(take!(buf))
+    @test str == """
+    4-element XAMAuxData.BAM.Auxiliary{MemoryViews.ImmutableMemoryView{UInt8}}:
+      "AB" => 0xf200
+      "kV" => "abcdef gh "
+      "JJ" => '!'
+      "zZ" => -1.2f0"""
 end
 
 @testset "Mutating" begin
@@ -630,6 +658,65 @@ end
         end
         @test Dict(cp) == d
     end
+end
+
+@testset "Exception types" begin
+    @test_throws(
+        "Not enough bytes remaining in Aux data to encode a full field",
+        first(values(SAM.Auxiliary("\t"))),
+    )
+
+    @test_throws(
+        "Invalid AuxTag. Tags must conform to r\"^[A-Za-z][A-Za-z0-9]\$\".",
+        first(values(SAM.Auxiliary("11:i:1"))),
+    )
+
+    @test_throws(
+        "Invalid SAM tag header. Expected <AuxTag>:<type tag>:, but found no colons.",
+        first(values(SAM.Auxiliary("ABi111"))),
+    )
+
+    @test_throws(
+        "BAM string or Hex type not terminated by null byte",
+        BAM.Auxiliary("ABZabc")["AB"],
+    )
+
+    @test_throws(
+        "BAM string or Hex type not terminated by null byte",
+        BAM.Auxiliary("ABH1234")["AB"],
+    )
+
+    @test_throws(
+        "Unknown type tag in aux value.",
+        BAM.Auxiliary("ABW123")["AB"],
+    )
+
+    @test_throws(
+        "Invalid array element type tag. Valid values are CcSsIif.",
+        BAM.Auxiliary("ABBW1234")["AB"],
+    )
+
+    @test_throws(
+        "Auxiliary Char (type 'A') must be in '!':'~'.",
+        SAM.Auxiliary(UInt8[], 1)["AB"] = '\n',
+    )
+
+    @test_throws(
+        "Data in SAM Auxiliary cannot be parsed as base-ten Int32.",
+        SAM.Auxiliary(UInt8[], 1)["AB"] = typemax(Int64)
+    )
+
+    @test_throws(
+        "Data in SAM Auxiliary cannot be parsed as Float32.",
+        SAM.Auxiliary(UInt8[], 1)["AB"] = 22e304,
+    )
+    @test SAM.Auxiliary(UInt8[], 1)["AB"] = Inf64 isa Any
+    @test SAM.Auxiliary(UInt8[], 1)["AB"] = -Inf64 isa Any
+
+    @test_throws(
+        "Auxiliary String (type 'Z') can only contain bytes in re\"[ !-~]\".",
+        SAM.Auxiliary(UInt8[], 1)["AB"] = "Rødgrød med fløde"
+    )
 end
 
 end # module
