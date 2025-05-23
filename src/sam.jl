@@ -17,7 +17,7 @@ import ..is_well_formed
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
-using MemoryViews: MemoryView, ImmutableMemoryView
+using MemoryViews: MemoryViews, MemoryView, ImmutableMemoryView
 using StringViews: StringView
 
 struct EncodedIterator <: AbstractEncodedIterator
@@ -101,7 +101,7 @@ function iter_encodings(aux::Auxiliary)
     EncodedIterator(DelimitedIterator(ImmutableMemoryView(aux), UInt8('\t')))
 end
 
-MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
+MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)

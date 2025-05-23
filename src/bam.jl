@@ -8,7 +8,7 @@ import ..striptype, ..validate_hex, ..is_well_formed
 
 public Auxiliary, AuxTag, Error, Errors
 
-using MemoryViews: ImmutableMemoryView, MutableMemoryView, MemoryView
+using MemoryViews: MemoryViews, ImmutableMemoryView, MutableMemoryView, MemoryView
 using StringViews: StringView
 
 """
@@ -61,7 +61,7 @@ Base.empty(::Type{Auxiliary}) = Auxiliary(UInt8[], 1)
 
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 
-MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
+MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
