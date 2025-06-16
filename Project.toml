@@ -1,6 +1,6 @@
 name = "XAMAuxData"
 uuid = "e99d641e-1821-45d7-9150-ecb7bf333fe1"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Jakob Nybo Nissen <jakobnybonissen@gmail.com>"]
 
 [deps]
