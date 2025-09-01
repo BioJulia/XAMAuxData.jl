@@ -422,7 +422,6 @@ end
 Base.IteratorSize(::Type{<:AbstractAuxiliary}) = Base.SizeUnknown()
 Base.eltype(::Type{<:AbstractAuxiliary}) = Pair{AuxTag, Any}
 
-include("delimited.jl")
 include("bam.jl")
 include("sam.jl")
 

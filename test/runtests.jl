@@ -1,6 +1,6 @@
 module XAMAuxDataTests
 
-using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, DelimitedIterator, Errors, try_auxtag
+using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, Errors, try_auxtag
 using Test
 using MemoryViews: MemoryView
 using FormatSpecimens
@@ -14,16 +14,6 @@ INT_TYPE_TO_CHAR = Dict(
     UInt32 => 'I',
     Int32 => 'i'
 )
-
-@testset "DelimitedIterator" begin
-    it = DelimitedIterator("abceacdga", UInt8('a'))
-    @test collect(it) == [
-        b"",
-        b"bce",
-        b"cdg",
-        b"",
-    ]
-end
 
 # This method relies on Base internals that are very unlikely to change,
 # but we should test it nonetheless
