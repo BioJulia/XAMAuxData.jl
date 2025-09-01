@@ -3,18 +3,18 @@ module SAM
 # Default Julia methods throw with bad keys, but not bad values (which are simply an error value)
 
 import ..AuxTag, ..AbstractAuxiliary, ..ELTYPE_DICT, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
-import ..DelimitedIterator, ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
+import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
 import ..is_well_formed, ..BIT_INTEGERS
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
-using MemoryViews: MemoryViews, MemoryView, ImmutableMemoryView
+using MemoryViews: MemoryViews, MemoryView, ImmutableMemoryView, DelimitedIterator, Immutable, split_each
 using StringViews: StringView
 
 struct EncodedIterator <: AbstractEncodedIterator
-    x::DelimitedIterator{UInt8}
+    x::DelimitedIterator{UInt8, Immutable}
 end
 
 function Base.iterate(it::EncodedIterator, state::Int=1)
@@ -91,7 +91,7 @@ Base.empty(::Type{Auxiliary}) = Auxiliary(UInt8[], 1)
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 
 function iter_encodings(aux::Auxiliary)
-    EncodedIterator(DelimitedIterator(ImmutableMemoryView(aux), UInt8('\t')))
+    EncodedIterator(split_each(ImmutableMemoryView(aux), UInt8('\t')))
 end
 
 MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
@@ -153,7 +153,7 @@ function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Err
     @inbounds(mem[1]) == UInt8(',') || return Errors.InvalidArray
     res = Memory{T}(undef, len)
     n = 0
-    for ele_mem in DelimitedIterator(@inbounds(mem[2:end]), UInt8(','))
+    for ele_mem in split_each(@inbounds(mem[2:end]), UInt8(','))
         n += 1
         val = tryparse(T, StringView(ele_mem))
         val === nothing && return Errors.InvalidArray
@@ -175,7 +175,7 @@ function validate_array(T::Type, mem::ImmutableMemoryView{UInt8})::Bool
     isempty(mem) && return true
     length(mem) == 1 && return false
     @inbounds(mem[1]) == UInt8(',') || return false
-    all(DelimitedIterator(@inbounds(mem[2:end]), UInt8(','))) do bytes
+    all(split_each(@inbounds(mem[2:end]), UInt8(','))) do bytes
         !isnothing(tryparse(T, bytes))
     end
 end
