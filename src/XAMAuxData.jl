@@ -43,7 +43,7 @@ struct Hex{V <: AbstractVector{UInt8}}
 
     function Hex(v::AbstractVector{UInt8})
         isempty(v) && error("Hex values cannot be empty according to SAM specs")
-        new{typeof(v)}(v)
+        return new{typeof(v)}(v)
     end
 end
 
@@ -55,7 +55,7 @@ function hexencode!(mem::MutableMemoryView, hex::Hex)
         mem[2 * byte_no - 1] = hexencode_nibble(byte >> 4)
         mem[2 * byte_no] = hexencode_nibble(byte & 0x0f)
     end
-    mem
+    return mem
 end
 
 # These are the type tags use to determine the value of the serialized data
@@ -89,12 +89,12 @@ function as_aux_value(x::Real)
     if !isinf(x) & isinf(f)
         throw(AuxException(Errors.InvalidFloat))
     end
-    f
+    return f
 end
 
 function as_aux_value(x::AbstractChar)::Char
     c = Char(x)::Char
-    is_printable_char(c) ? c : throw(AuxException(Errors.InvalidChar))
+    return is_printable_char(c) ? c : throw(AuxException(Errors.InvalidChar))
 end
 
 as_aux_value(x::Hex) = x
@@ -116,7 +116,7 @@ function as_aux_value(s::AbstractString)
     else
         throw(AuxException(Errors.InvalidString))
     end
-    auxs
+    return auxs
 end
 
 # Returns an AbstractVector{<:AUX_NUMBER_TYPES}
@@ -127,7 +127,7 @@ function as_aux_value(v::AbstractVector{<:Real})
     for i in eachindex(v, mem)
         mem[i] = E(v[i])::E
     end
-    mem
+    return mem
 end
 
 function is_printable(v::AbstractVector{UInt8})
@@ -135,7 +135,7 @@ function is_printable(v::AbstractVector{UInt8})
     for b in v
         res &= (b == UInt8(' ')) | is_printable_char(b)
     end
-    res
+    return res
 end
 
 abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
@@ -148,7 +148,7 @@ function Base.copy(aux::AbstractAuxiliary)
     else
         copy(MemoryView(aux))
     end
-    striptype(typeof(aux))(v, 1)
+    return striptype(typeof(aux))(v, 1)
 end
 
 function Base.length(aux::AbstractAuxiliary)::Int
@@ -157,18 +157,18 @@ function Base.length(aux::AbstractAuxiliary)::Int
         val isa Error && return n
         n += 1
     end
-    n
+    return n
 end
 
 function Base.haskey(aux::AbstractAuxiliary, k)::Bool
     key = convert(AuxTag, k)
-    any(iter_encodings(aux)) do i
+    return any(iter_encodings(aux)) do i
         !(i isa Error) && first(i) == key
     end
 end
 
 function Base.keys(aux::AbstractAuxiliary)
-    Iterators.map(iter_encodings(aux)) do val
+    return Iterators.map(iter_encodings(aux)) do val
         if val isa Error
             throw(AuxException(val))
         else
@@ -201,27 +201,27 @@ See also: [`Error`](@ref)
 """
 module Errors
 
-# See the related showerror method for descriptions of these values
-@enum Error::Int32 begin
-    # These four can be emitted from the EncodedIterator
-    TooShortMemory
-    InvalidAuxTag
-    NoColons # not AB:C:x, SAM only
-    NoNullByte # BAM only
+    # See the related showerror method for descriptions of these values
+    @enum Error::Int32 begin
+        # These four can be emitted from the EncodedIterator
+        TooShortMemory
+        InvalidAuxTag
+        NoColons # not AB:C:x, SAM only
+        NoNullByte # BAM only
 
-    # These are emitted from EncodedIterator in BAM's case,
-    # but when loading the aux value in SAM's case.
-    InvalidTypeTag
-    InvalidArrayEltype
+        # These are emitted from EncodedIterator in BAM's case,
+        # but when loading the aux value in SAM's case.
+        InvalidTypeTag
+        InvalidArrayEltype
 
-    # Only emitted when loading the value
-    InvalidChar
-    InvalidInt # SAM only
-    InvalidFloat # SAM only
-    InvalidString
-    InvalidArray
-    InvalidHex
-end
+        # Only emitted when loading the value
+        InvalidChar
+        InvalidInt # SAM only
+        InvalidFloat # SAM only
+        InvalidString
+        InvalidArray
+        InvalidHex
+    end
 
 end # module errors
 
@@ -282,7 +282,7 @@ function Base.showerror(io::IO, error::AuxException)
     else
         @assert false # unreachable
     end
-    print(io, s)
+    return print(io, s)
 end
 
 abstract type AbstractEncodedIterator end
@@ -304,7 +304,7 @@ function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
         (a | b) == 0xff && return Errors.InvalidHex
         hex[i] = (a << 4) | b
     end
-    hex
+    return hex
 end
 
 """
@@ -349,7 +349,7 @@ InvalidString::Error = 9
 ```
 """
 function is_well_formed(it::AbstractAuxiliary)
-    all(iter_encodings(it)) do i
+    return all(iter_encodings(it)) do i
         !isa(i, Error)
     end
 end
@@ -381,14 +381,14 @@ function validate_hex(mem::ImmutableMemoryView{UInt8})::Bool
     good = true
     for byte in mem
         good &= byte in UInt8('0'):UInt8('9') ||
-        byte in UInt8('a'):UInt8('h') ||
-        byte in UInt8('A'):UInt8('H')
+            byte in UInt8('a'):UInt8('h') ||
+            byte in UInt8('A'):UInt8('H')
     end
-    good
+    return good
 end
 
 function pack_hex(a::UInt8)::UInt8 # 0xff for bad hex
-    if a ∈ 0x30:0x39
+    return if a ∈ 0x30:0x39
         a - 0x30
     elseif a ∈ UInt8('A'):UInt8('F')
         a - UInt8('A') + UInt8(10)
@@ -400,7 +400,7 @@ function pack_hex(a::UInt8)::UInt8 # 0xff for bad hex
 end
 
 function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)
-    if is_well_formed(x)
+    return if is_well_formed(x)
         buf = IOBuffer()
         println(buf, length(x), "-element ", typeof(x), ':')
         content = IOContext(buf, :limit => true, :compact => true)
@@ -412,7 +412,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)
             # TODO: Content length limitation doesn't actually work
             println(content, "  \"", string(key), "\" => ", repr(value))
         end
-        write(io, take!(buf)[1:end-1]) # remove trailing newline
+        write(io, take!(buf)[1:(end - 1)]) # remove trailing newline
     else
         print(io, "Malformed ", typeof(x))
     end

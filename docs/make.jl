@@ -6,20 +6,20 @@ meta = quote
     line = "AK:z:some string\ts1:i:2512\tst:A:+\tas:f:211.2\tar:B:c3,-16,21,-100"
 end
 
-DocMeta.setdocmeta!(XAMAuxData, :DocTestSetup, meta; recursive=true)
+DocMeta.setdocmeta!(XAMAuxData, :DocTestSetup, meta; recursive = true)
 
 makedocs(;
-    sitename="XAMAuxData.jl",
-    modules=[XAMAuxData],
-    pages=["Home" => "index.md", "Reference" => "reference.md"],
-    authors="Jakob Nybo Nissen",
-    checkdocs=:public,
-    remotes=nothing,
+    sitename = "XAMAuxData.jl",
+    modules = [XAMAuxData],
+    pages = ["Home" => "index.md", "Reference" => "reference.md"],
+    authors = "Jakob Nybo Nissen",
+    checkdocs = :public,
+    remotes = nothing,
 )
 
 deploydocs(;
-    repo="github.com/BioJulia/XAMAuxData.jl.git",
-    push_preview=true,
-    deps=nothing,
-    make=nothing,
+    repo = "github.com/BioJulia/XAMAuxData.jl.git",
+    push_preview = true,
+    deps = nothing,
+    make = nothing,
 )
