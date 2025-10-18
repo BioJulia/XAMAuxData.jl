@@ -8,6 +8,15 @@ that the key is of appropriate format.
 `Auxiliary` can also be modified using strings as keys, which will be converted
 to `AuxTag`, but this may cause a needless allocation of the string.
 
+To construct an `AuxTag` of value "AB", you can use:
+* `AuxTag("AB")`
+* `AuxTag('A', 'B')`
+* `AuxTag(UInt8('A'), UInt8('B'))`
+* `try_auxtag(UInt8('A'), UInt8('B'))`
+
+Thow an `AuxException` if the resulting AuxTag does not conform to the regex
+r"^[A-Za-z][A-Za-z0-9]\$".
+
 # Examples
 ```jldoctest
 julia> AuxTag("AC")
@@ -44,6 +53,26 @@ function is_valid_auxtag(x::UInt8, y::UInt8)
     (in(x, upper) | in(x, lower)) & (in(y, digit) | in(y, upper) | in(y, lower))
 end
 
+"""
+    try_augtax(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
+
+Like `AuxTag(a, b)`, but return nothing instead of throwing an exception if the
+tag is invalid.
+
+See also: [`AuxTag`]
+
+# Examples
+```
+julia> try_auxtag(UInt8('k'), UInt8('9'))
+AuxTag("k9")
+
+julia> try_auxtag(UInt8('A'), UInt8('B'))
+AuxTag("AB")
+
+julia> try_auxtag(UInt8('1'), UInt8('Z')) === nothing
+true
+```
+"""
 function try_auxtag(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
     is_valid_auxtag(a, b) ? AuxTag(unsafe, a, b) : nothing
 end
