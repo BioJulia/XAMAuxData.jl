@@ -6,7 +6,7 @@ using StringViews: StringView
 struct Unsafe end
 const unsafe = Unsafe()
 
-export Hex, AuxTag, SAM, BAM, is_well_formed
+export Hex, AuxTag, try_auxtag, SAM, BAM, is_well_formed
 public Errors, Error
 
 # These are the numerical types supported by the BAM format.

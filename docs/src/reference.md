@@ -8,6 +8,7 @@ end
 # Reference
 ```@docs
 AuxTag
+try_auxtag
 Hex
 Error
 Errors

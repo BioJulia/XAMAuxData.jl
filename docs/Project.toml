@@ -5,4 +5,4 @@ XAMAuxData = "e99d641e-1821-45d7-9150-ecb7bf333fe1"
 
 [compat]
 Documenter = "1"
-MemoryViews = "0.2"
+MemoryViews = "0.3"

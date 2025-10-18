@@ -62,6 +62,8 @@ ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]$".
 [...]
 ```
 
+You can also construct an `AuxTag` using `[try_auxtag](@ref)`.
+
 ## Constructing `Auxiliary` objects
 `SAM.Auxiliary` and `BAM.Auxiliary` are constructed the same two ways.
 
