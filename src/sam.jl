@@ -17,20 +17,20 @@ struct EncodedIterator <: AbstractEncodedIterator
     x::DelimitedIterator{UInt8, Immutable}
 end
 
-function Base.iterate(it::EncodedIterator, state::Int=1)
+function Base.iterate(it::EncodedIterator, state::Int = 1)
     itval = iterate(it.x, state)
     isnothing(itval) && return nothing
     (mem, newstate) = itval
     parsed = parse_encoded_aux(mem)
     parsed isa Error && return (parsed, length(it.x.v) + 1)
     (tag, eltype) = parsed
-    span = 5 + state:lastindex(mem) + state - 1
-    ((tag, eltype, span), newstate)
+    span = (5 + state):(lastindex(mem) + state - 1)
+    return ((tag, eltype, span), newstate)
 end
 
 function parse_encoded_aux(
-    mem::ImmutableMemoryView{UInt8},
-)::Union{Tuple{AuxTag, UInt8}, Error}
+        mem::ImmutableMemoryView{UInt8},
+    )::Union{Tuple{AuxTag, UInt8}, Error}
     length(mem) < 5 && return Errors.TooShortMemory
     t1 = @inbounds mem[1]
     t2 = @inbounds mem[2]
@@ -38,7 +38,7 @@ function parse_encoded_aux(
     isnothing(tag) && return Errors.InvalidAuxTag
     (@inbounds mem[3] == mem[5] == UInt8(':')) || return Errors.NoColons
     eltype = @inbounds mem[4]
-    (tag, eltype)
+    return (tag, eltype)
 end
 
 """
@@ -75,13 +75,13 @@ struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     function Auxiliary(v::Vector{UInt8}, i::Integer)
         i = Int(i)::Int
         ((i - 1) % UInt) > (length(v) % UInt) + 1 && error("Start index must be in 1:length(vector) + 1")
-        new{Vector{UInt8}}(v, Int(i)::Int)
+        return new{Vector{UInt8}}(v, Int(i)::Int)
     end
 
     function Auxiliary(x)
         mem = ImmutableMemoryView(x)
         eltype(mem) == UInt8 || error("Must construct Auxiliary from MemoryView{UInt8}")
-        new{ImmutableMemoryView{UInt8}}(mem, 1)
+        return new{ImmutableMemoryView{UInt8}}(mem, 1)
     end
 end
 
@@ -91,19 +91,19 @@ Base.empty(::Type{Auxiliary}) = Auxiliary(UInt8[], 1)
 const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 
 function iter_encodings(aux::Auxiliary)
-    EncodedIterator(split_each(ImmutableMemoryView(aux), UInt8('\t')))
+    return EncodedIterator(split_each(ImmutableMemoryView(aux), UInt8('\t')))
 end
 
 MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
-    x
+    return x
 end
 
 Base.isempty(x::Auxiliary) = x.start > length(x.x)
 
-function Base.iterate(aux::Auxiliary, state::Int=1)
+function Base.iterate(aux::Auxiliary, state::Int = 1)
     it = iter_encodings(aux)
     itval = iterate(it, state)
     itval === nothing && return nothing
@@ -111,7 +111,7 @@ function Base.iterate(aux::Auxiliary, state::Int=1)
     val isa Error && throw(AuxException(val))
     (key, typetag, span) = val
     value = load_auxvalue(typetag, @inbounds it.x.v[span])
-    (key => value, new_state)
+    return (key => value, new_state)
 end
 
 function Base.get(aux::Auxiliary, k, default)
@@ -124,7 +124,7 @@ function Base.get(aux::Auxiliary, k, default)
             return load_auxvalue(typetag, @inbounds it.x.v[span])
         end
     end
-    default
+    return default
 end
 
 function Base.isvalid(aux::Auxiliary)
@@ -135,7 +135,7 @@ function Base.isvalid(aux::Auxiliary)
         mem = it.x.v[span]
         validate_encoding(eltype, mem) || return false
     end
-    true
+    return true
 end
 
 function load_array(mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
@@ -143,7 +143,7 @@ function load_array(mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
     eltype_tag = @inbounds mem[1]
     eltype = get(ELTYPE_DICT, eltype_tag, nothing)
     isnothing(eltype) && return Errors.InvalidArrayEltype
-    load_array(eltype, @inbounds mem[2:end])
+    return load_array(eltype, @inbounds mem[2:end])
 end
 
 function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
@@ -160,7 +160,7 @@ function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Err
         @inbounds res[n] = val
 
     end
-    res
+    return res
 end
 
 function validate_array(mem::ImmutableMemoryView{UInt8})::Bool
@@ -168,25 +168,25 @@ function validate_array(mem::ImmutableMemoryView{UInt8})::Bool
     eltype_tag = @inbounds mem[1]
     eltype = get(ELTYPE_DICT, eltype_tag, nothing)
     isnothing(eltype) && return false
-    validate_array(eltype, @inbounds mem[2:end])
+    return validate_array(eltype, @inbounds mem[2:end])
 end
 
 function validate_array(T::Type, mem::ImmutableMemoryView{UInt8})::Bool
     isempty(mem) && return true
     length(mem) == 1 && return false
     @inbounds(mem[1]) == UInt8(',') || return false
-    all(split_each(@inbounds(mem[2:end]), UInt8(','))) do bytes
+    return all(split_each(@inbounds(mem[2:end]), UInt8(','))) do bytes
         !isnothing(tryparse(T, bytes))
     end
 end
 
 function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bool
-    if type_tag == UInt8('A')
+    return if type_tag == UInt8('A')
         length(mem) == 1 || return false
         b = @inbounds mem[1]
         is_printable_char(b)
     elseif type_tag == UInt8('i')
-        tryparse(Int, StringView(mem); base=10) !== nothing
+        tryparse(Int, StringView(mem); base = 10) !== nothing
     elseif type_tag == UInt8('f')
         tryparse(Float32, StringView(mem)) !== nothing
     elseif type_tag == UInt8('Z')
@@ -207,7 +207,7 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
         is_printable_char(b) ? Char(b) : Errors.InvalidChar
     elseif type_tag == UInt8('i')
         isempty(mem) && return Errors.InvalidInt
-        n = tryparse(Int, StringView(mem); base=10)
+        n = tryparse(Int, StringView(mem); base = 10)
         n === nothing ? Errors.InvalidInt : n
     elseif type_tag == UInt8('f')
         n = tryparse(Float32, StringView(mem))
@@ -232,7 +232,7 @@ function as_sam_aux_value(x::Integer)::Int32
 end
 
 function as_sam_aux_value(x::BIT_INTEGERS)::Int32
-    if (x < typemin(Int32)) | (x > typemax(Int32))
+    return if (x < typemin(Int32)) | (x > typemax(Int32))
         throw(AuxException(Errors.InvalidInt))
     else
         x % Int32
@@ -258,21 +258,21 @@ function setindex_nonexisting!(aux::MutableAuxiliary, val, key::AuxTag)
         data[oldlen + 4] = type_tag
         data[oldlen + 5] = UInt8(':')
     end
-    unsafe_copyto!(MemoryView(data)[oldlen+6:end], MemoryView(value_bytes)[1:length(value_bytes)])
-    aux
+    unsafe_copyto!(MemoryView(data)[(oldlen + 6):end], MemoryView(value_bytes)[1:length(value_bytes)])
+    return aux
 end
 
 function as_serialized_bytes(val::Union{Char, Real, AbstractString})
     buf = IOBuffer()
     print(buf, val)
-    take!(buf)
+    return take!(buf)
 end
 
 function as_serialized_bytes(hex::Hex)
     m = Memory{UInt8}(undef, 2 * length(hex.x))
     hexencode!(MemoryView(m), hex)
-    m
-end 
+    return m
+end
 
 function as_serialized_bytes(v::AbstractVector)
     buf = IOBuffer()
@@ -281,7 +281,7 @@ function as_serialized_bytes(v::AbstractVector)
         print(buf, ',')
         print(buf, i)
     end
-    take!(buf)
+    return take!(buf)
 end
 
 function Base.delete!(aux::MutableAuxiliary, k)
@@ -301,23 +301,23 @@ function Base.delete!(aux::MutableAuxiliary, k)
                     start_delete:stop_delete
                 else
                     # Otherwise, if first element, delete trailing tab
-                    start_delete:stop_delete + 1
+                    start_delete:(stop_delete + 1)
                 end
             else
                 # Otherwise, delete leading tab
-                start_delete-1:stop_delete
+                (start_delete - 1):stop_delete
             end
             deleteat!(aux.x, to_delete)
             break
         end
     end
-    aux
+    return aux
 end
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
     key = convert(AuxTag, k)
     delete!(aux, key)
-    setindex_nonexisting!(aux, val, key)
+    return setindex_nonexisting!(aux, val, key)
 end
 
 end # module

@@ -46,13 +46,13 @@ struct Auxiliary{T} <: AbstractAuxiliary{T}
 
     function Auxiliary(v::Vector{UInt8}, i::Integer)
         ((i - 1) % UInt) > (length(v) % UInt) + 1 && error("Start index must be in 1:length(vector) + 1")
-        new{Vector{UInt8}}(v, Int(i)::Int)
+        return new{Vector{UInt8}}(v, Int(i)::Int)
     end
 
     function Auxiliary(x)
         mem = ImmutableMemoryView(x)
         eltype(mem) == UInt8 || error("Must construct Auxiliary from MemoryView{UInt8}")
-        new{ImmutableMemoryView{UInt8}}(mem, 1)
+        return new{ImmutableMemoryView{UInt8}}(mem, 1)
     end
 end
 
@@ -65,12 +65,12 @@ MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
     resize!(x.x, x.start - 1)
-    x
+    return x
 end
 
 Base.isempty(x::Auxiliary) = x.start > length(x.x)
 
-function Base.iterate(aux::Auxiliary, state::Int=1)
+function Base.iterate(aux::Auxiliary, state::Int = 1)
     it = iter_encodings(aux)
     itval = iterate(it, state)
     itval === nothing && return nothing
@@ -79,7 +79,7 @@ function Base.iterate(aux::Auxiliary, state::Int=1)
     (key, typetag, span) = val
     value = load_auxvalue(typetag, @inbounds it.mem[span])
     value isa Error && return (value, new_state)
-    (key => value, new_state)
+    return (key => value, new_state)
 end
 
 struct EncodedIterator <: AbstractEncodedIterator
@@ -96,31 +96,31 @@ function Base.isvalid(aux::Auxiliary)
         mem = it.mem[span]
         validate_encoding(eltype, mem) || return false
     end
-    true
+    return true
 end
 
 function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bool
-    if type_tag == UInt8('A')
+    return if type_tag == UInt8('A')
         length(mem) == 1 || return false
         b = @inbounds mem[1]
         is_printable_char(b)
-    # Binary numbers, or arrays of binary numbers cannot be invalid
+        # Binary numbers, or arrays of binary numbers cannot be invalid
     elseif type_tag in (UInt8('c'), UInt8('C'), UInt8('s'), UInt8('S'), UInt8('I'), UInt8('i'), UInt8('f'), UInt8('B'))
         true
     elseif type_tag == UInt8('H')
         zeropos = findnext(iszero, mem, 1)
         isnothing(zeropos) && return false
-        validate_hex(mem[1:zeropos-1])
+        validate_hex(mem[1:(zeropos - 1)])
     elseif type_tag == UInt8('Z')
         zeropos = findnext(iszero, mem, 1)
         isnothing(zeropos) && return false
-        is_printable(mem[1:zeropos-1])
+        is_printable(mem[1:(zeropos - 1)])
     else
         false
     end
 end
 
-function Base.iterate(it::EncodedIterator, state::Int=1)
+function Base.iterate(it::EncodedIterator, state::Int = 1)
     mem = it.mem
     state > length(mem) && return nothing
     state > length(mem) - 3 && return (Errors.TooShortMemory, length(mem) + 1)
@@ -133,20 +133,20 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
     # One byte values
     stop = if type_tag in (UInt8('C'), UInt8('c'), UInt8('A'))
         start
-    # Two byte values
+        # Two byte values
     elseif type_tag in (UInt8('S'), UInt8('s'))
-        data_length < 2 && return (Errors.TooShortMemory, length(mem)+1)
+        data_length < 2 && return (Errors.TooShortMemory, length(mem) + 1)
         start + 1
-    # Four byte values
+        # Four byte values
     elseif type_tag in (UInt8('I'), UInt8('i'), UInt8('f'))
-        data_length < 4 && return (Errors.TooShortMemory, length(mem)+1)
+        data_length < 4 && return (Errors.TooShortMemory, length(mem) + 1)
         start + 3
-    # Null-terminated values
+        # Null-terminated values
     elseif type_tag in (UInt8('Z'), UInt8('H'))
         zeropos = findnext(iszero, mem, start)
         isnothing(zeropos) && return (Errors.NoNullByte, length(mem) + 1)
         zeropos
-    # Arrays
+        # Arrays
     elseif type_tag == UInt8('B')
         # Minimum data length for empty array:
         # Array element type byte plus 4 for array length
@@ -165,9 +165,9 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
         # Note: All BAM integers are little endian so we can do this
         n_elements = @inbounds begin
             mem[start + 1] % UInt32 |
-            (mem[start + 2] % UInt32) << 8 |
-            (mem[start + 3] % UInt32) << 16 |
-            (mem[start + 4] % UInt32) << 24
+                (mem[start + 2] % UInt32) << 8 |
+                (mem[start + 3] % UInt32) << 16 |
+                (mem[start + 4] % UInt32) << 24
         end
         len = n_elements * eltype_size
         data_length < len + 5 && return (Errors.TooShortMemory, length(mem) + 1)
@@ -175,7 +175,7 @@ function Base.iterate(it::EncodedIterator, state::Int=1)
     else
         return (Errors.InvalidTypeTag, length(mem) + 1)
     end
-    ((tag, type_tag, start:stop), stop + 1)
+    return ((tag, type_tag, start:stop), stop + 1)
 end
 
 function load_array(mem::ImmutableMemoryView{UInt8})
@@ -184,12 +184,12 @@ function load_array(mem::ImmutableMemoryView{UInt8})
     @inbounds begin
         # The correctness of this byte has already been validated in the EncodedIterator
         eltype = ELTYPE_DICT[mem[1]]
-            n_elements = mem[2] % UInt32 |
+        n_elements = mem[2] % UInt32 |
             (mem[3] % UInt32) << 8 |
             (mem[4] % UInt32) << 16 |
             (mem[5] % UInt32) << 24
     end
-    load_array(eltype, n_elements, @inbounds mem[6:end])
+    return load_array(eltype, n_elements, @inbounds mem[6:end])
 end
 
 function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemoryView{UInt8})
@@ -197,11 +197,11 @@ function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemoryView{UInt8}
     # Should not be possible, since the number of elements is used to determine
     # the memory size
     length(res) == n_elements || return Errors.InvalidArray
-    res
+    return res
 end
 
 function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
-    if type_tag == UInt8('C')
+    return if type_tag == UInt8('C')
         @inbounds mem[1]
     elseif type_tag == UInt8('c')
         @inbounds mem[1] % Int8
@@ -224,10 +224,10 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
                 ltoh(unsafe_load(Ptr{Float32}(ptr)))
             elseif type_tag == UInt8('Z')
                 # Compensate for null terminator byte
-                sm = @inbounds mem[1:end-1]
+                sm = @inbounds mem[1:(end - 1)]
                 is_printable(sm) ? StringView(sm) : Errors.InvalidString
             elseif type_tag == UInt8('H')
-                mem = @inbounds mem[1:end-1]
+                mem = @inbounds mem[1:(end - 1)]
                 load_hex(mem)
             elseif type_tag == UInt8('B')
                 load_array(mem)
@@ -246,11 +246,11 @@ function Base.delete!(aux::MutableAuxiliary, k)
         (tag, _, span) = v
         if tag == key
             offset = aux.start - 1
-            deleteat!(aux.x, first(span)-3+offset:last(span)+offset)
+            deleteat!(aux.x, (first(span) - 3 + offset):(last(span) + offset))
             break
         end
     end
-    aux
+    return aux
 end
 
 bytes_needed(x::Union{Int8, UInt8, Char}) = 1
@@ -262,7 +262,7 @@ bytes_needed(x::Hex) = 2 * length(x.x) + 1 # null byte
 
 function bytes_needed(x::AbstractVector{<:AUX_NUMBER_TYPES})
     base = 1 + 4
-    isempty(x) ? base : base + bytes_needed(@inbounds x[1]) * length(x) 
+    return isempty(x) ? base : base + bytes_needed(@inbounds x[1]) * length(x)
 end
 
 as_bam_aux_value(x::AUX_NUMBER_TYPES) = x
@@ -280,24 +280,24 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
             n_bytes_needed = bytes_needed(bam_val)
             if length(span) > n_bytes_needed
                 leftshift = length(span) - n_bytes_needed
-                deleteat!(aux.x, first(span)-1:first(span)-2+leftshift)
-            # Shift right
+                deleteat!(aux.x, (first(span) - 1):(first(span) - 2 + leftshift))
+                # Shift right
             elseif length(span) < n_bytes_needed
                 rightshift = n_bytes_needed - length(span)
                 oldsize = length(aux.x)
                 resize!(aux.x, oldsize + rightshift)
                 mem = MemoryView(aux)
-                @inbounds for i in length(mem):-1:last(span)+rightshift+1
+                @inbounds for i in length(mem):-1:(last(span) + rightshift + 1)
                     mem[i] = mem[i - rightshift]
                 end
             end
-            mem = @inbounds MemoryView(aux)[first(span)-1:first(span) + n_bytes_needed - 1]
+            mem = @inbounds MemoryView(aux)[(first(span) - 1):(first(span) + n_bytes_needed - 1)]
             write_auxvalue_typetag!(mem, bam_val)
             return aux
         end
     end
     setindex_nonexisting!(aux, val, key)
-    aux
+    return aux
 end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, k)
@@ -309,15 +309,15 @@ function setindex_nonexisting!(aux::MutableAuxiliary, val, k)
     resize!(data, old_len + 3 + n_bytes_needed)
     @inbounds data[old_len + 1] = key.x[1]
     @inbounds data[old_len + 2] = key.x[2]
-    mem = @inbounds MemoryView(aux)[end - n_bytes_needed: end]
+    mem = @inbounds MemoryView(aux)[(end - n_bytes_needed):end]
     write_auxvalue_typetag!(mem, bam_val)
-    aux
+    return aux
 end
 
 function write_auxvalue_typetag!(mem::MutableMemoryView{UInt8}, bam_val)
     type_tag = get_type_tag(typeof(bam_val))
     @inbounds mem[1] = type_tag
-    if type_tag in (UInt8('C'), UInt8('c'))
+    return if type_tag in (UInt8('C'), UInt8('c'))
         @inbounds mem[2] = reinterpret(UInt8, bam_val)
     elseif type_tag == UInt8('A')
         @inbounds mem[2] = (reinterpret(UInt32, bam_val) >> 24) % UInt8
@@ -332,7 +332,7 @@ function write_auxvalue_typetag!(mem::MutableMemoryView{UInt8}, bam_val)
                 unsafe_copyto!(mem[2:end], ImmutableMemoryView(codeunits(bam_val)))
                 @inbounds mem[end] = 0x00
             elseif type_tag == UInt8('H')
-                m = @inbounds mem[2:end-1]
+                m = @inbounds mem[2:(end - 1)]
                 hexencode!(m, bam_val)
                 @inbounds mem[end] = 0x00
             elseif type_tag == UInt8('B')
@@ -361,7 +361,7 @@ function Base.get(aux::Auxiliary, k, default)
             return load_auxvalue(typetag, @inbounds it.mem[span])
         end
     end
-    default
+    return default
 end
 
 end # module
