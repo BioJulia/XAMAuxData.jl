@@ -298,6 +298,12 @@ end
         @test isempty(MemoryView(aux))
     end
 
+    @testset "isvalid" begin
+        s = "ab:i:4\tka:A:m\ttp:f:0.2123\tmn:H:13af\tAC:B:c,3,2,-34,25,62,-123"
+        aux = SAM.Auxiliary(collect(codeunits(s)), 1)
+        @test isvalid(aux)
+    end
+
 end # SAM
 
 @testset "BAM" begin
@@ -517,6 +523,12 @@ end # SAM
             delete!(aux, "PG")
             @test isempty(MemoryView(aux))
         end
+    end
+
+    @testset "isvalid" begin
+        s = "abAcbbHafde01\0kaZabcdefgh\0kkC8mnBC\3\0\0\0abc"
+        aux = BAM.Auxiliary(collect(codeunits(s)), 1)
+        @test isvalid(aux)
     end
 
 end # BAM

@@ -176,7 +176,7 @@ function validate_array(T::Type, mem::ImmutableMemoryView{UInt8})::Bool
     length(mem) == 1 && return false
     @inbounds(mem[1]) == UInt8(',') || return false
     return all(split_each(@inbounds(mem[2:end]), UInt8(','))) do bytes
-        !isnothing(tryparse(T, bytes))
+        !isnothing(tryparse(T, StringView(bytes)))
     end
 end
 
