@@ -239,7 +239,8 @@ function as_sam_aux_value(x::BIT_INTEGERS)::Int32
     end
 end
 
-function setindex_nonexisting!(aux::MutableAuxiliary, val, key::AuxTag)
+function setindex_nonexisting!(aux::MutableAuxiliary, val, key)
+    key = convert(AuxTag, key)::AuxTag
     v = as_sam_aux_value(val)
     type_tag = get_type_tag(typeof(v))
     value_bytes = as_serialized_bytes(v)

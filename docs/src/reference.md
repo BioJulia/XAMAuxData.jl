@@ -1,7 +1,7 @@
 ```@meta
 CurrentModule = XAMAuxData
 DocTestSetup = quote
-    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error, is_well_formed
+    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error, is_well_formed, setindex_nonexisting!
 end
 ```
 
@@ -16,4 +16,5 @@ SAM.Auxiliary
 BAM.Auxiliary
 is_well_formed
 Base.isvalid(::XAMAuxData.AbstractAuxiliary)
+setindex_nonexisting!
 ```

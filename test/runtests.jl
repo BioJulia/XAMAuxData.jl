@@ -725,4 +725,27 @@ end
     )
 end
 
+@testset "Convertion from SAM to BAM" begin
+    kvs = Any[
+        AuxTag("VN") => 'i',
+        AuxTag("ab") => [0x02, 0x7a, 0xf1],
+        AuxTag("F1") => 1.5f0,
+        AuxTag("Ni") => 55,
+    ]
+    for (T1, T2) in [
+            (BAM.Auxiliary, SAM.Auxiliary),
+            (SAM.Auxiliary, BAM.Auxiliary),
+        ]
+        dst = T1(UInt8[], 1)
+        src = T2(UInt8[], 1)
+        dst["KA"] = 55
+        for (k, v) in kvs
+            src[k] = v
+        end
+        copy!(dst, src)
+
+        @test dst == Dict(kvs)
+    end
+end
+
 end # module

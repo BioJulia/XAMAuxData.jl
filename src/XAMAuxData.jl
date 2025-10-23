@@ -6,7 +6,7 @@ using StringViews: StringView
 struct Unsafe end
 const unsafe = Unsafe()
 
-export Hex, AuxTag, try_auxtag, SAM, BAM, is_well_formed
+export Hex, AuxTag, try_auxtag, SAM, BAM, is_well_formed, setindex_nonexisting!
 public Errors, Error
 
 # These are the numerical types supported by the BAM format.
@@ -177,6 +177,25 @@ function Base.keys(aux::AbstractAuxiliary)
     end
 end
 
+"""
+    setindex_nonexisting!(dst::MutableAuxiliary, val, key) -> dst
+
+Same as `dst[key] = val`, but assumes that `key` is not present
+in `dst`.
+
+!!! warning
+    If `key` is in `dst`, this will result in a corrupt `dst`,
+    which may cause invalid behaviour.
+
+# Examples
+```jldoctest
+julia> v = SAM.Auxiliary(UInt8[], 1);
+
+julia> setindex_nonexisting!(v, 'k', "BA")
+1-element XAMAuxData.SAM.Auxiliary{Vector{UInt8}}:
+  "BA" => 'k'
+```
+"""
 function setindex_nonexisting! end
 
 const ELTYPE_DICT = Dict(
@@ -424,5 +443,21 @@ Base.eltype(::Type{<:AbstractAuxiliary}) = Pair{AuxTag, Any}
 
 include("bam.jl")
 include("sam.jl")
+
+function Base.copy!(dst::BAM.MutableAuxiliary, src::SAM.Auxiliary)
+    empty!(dst)
+    for (auxtag, v) in src
+        BAM.setindex_nonexisting!(dst, v, auxtag)
+    end
+    return dst
+end
+
+function Base.copy!(dst::SAM.MutableAuxiliary, src::BAM.Auxiliary)
+    empty!(dst)
+    for (auxtag, v) in src
+        SAM.setindex_nonexisting!(dst, v, auxtag)
+    end
+    return dst
+end
 
 end # module XAMAuxData
