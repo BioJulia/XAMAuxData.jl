@@ -6,7 +6,7 @@ using StringViews: StringView
 struct Unsafe end
 const unsafe = Unsafe()
 
-export Hex, AuxTag, try_auxtag, SAM, BAM, is_well_formed
+export Hex, AuxTag, try_auxtag, SAM, BAM, is_well_formed, setindex_nonexisting!
 public Errors, Error
 
 # These are the numerical types supported by the BAM format.
@@ -141,14 +141,15 @@ end
 abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
 
 function striptype end
+
 function Base.copy(aux::AbstractAuxiliary)
     x = aux.x
-    v = if x isa Vector{UInt8}
-        x[aux.start:end]
+    T = striptype(typeof(aux))
+    return if x isa Vector{UInt8}
+        T(x[aux.start:end], 1)
     else
-        copy(MemoryView(aux))
+        T(copy(MemoryView(aux)))
     end
-    return striptype(typeof(aux))(v, 1)
 end
 
 function Base.length(aux::AbstractAuxiliary)::Int
@@ -177,6 +178,25 @@ function Base.keys(aux::AbstractAuxiliary)
     end
 end
 
+"""
+    setindex_nonexisting!(dst::MutableAuxiliary, val, key) -> dst
+
+Same as `dst[key] = val`, but assumes that `key` is not present
+in `dst`.
+
+!!! warning
+    If `key` is in `dst`, this will result in a corrupt `dst`,
+    which may cause invalid behaviour.
+
+# Examples
+```jldoctest
+julia> v = SAM.Auxiliary(UInt8[], 1);
+
+julia> setindex_nonexisting!(v, 'k', "BA")
+1-element XAMAuxData.SAM.Auxiliary{Vector{UInt8}}:
+  "BA" => 'k'
+```
+"""
 function setindex_nonexisting! end
 
 const ELTYPE_DICT = Dict(
@@ -381,8 +401,8 @@ function validate_hex(mem::ImmutableMemoryView{UInt8})::Bool
     good = true
     for byte in mem
         good &= byte in UInt8('0'):UInt8('9') ||
-            byte in UInt8('a'):UInt8('h') ||
-            byte in UInt8('A'):UInt8('H')
+            byte in UInt8('a'):UInt8('f') ||
+            byte in UInt8('A'):UInt8('F')
     end
     return good
 end
@@ -424,5 +444,21 @@ Base.eltype(::Type{<:AbstractAuxiliary}) = Pair{AuxTag, Any}
 
 include("bam.jl")
 include("sam.jl")
+
+function Base.copy!(dst::BAM.MutableAuxiliary, src::SAM.Auxiliary)
+    empty!(dst)
+    for (auxtag, v) in src
+        BAM.setindex_nonexisting!(dst, v, auxtag)
+    end
+    return dst
+end
+
+function Base.copy!(dst::SAM.MutableAuxiliary, src::BAM.Auxiliary)
+    empty!(dst)
+    for (auxtag, v) in src
+        SAM.setindex_nonexisting!(dst, v, auxtag)
+    end
+    return dst
+end
 
 end # module XAMAuxData

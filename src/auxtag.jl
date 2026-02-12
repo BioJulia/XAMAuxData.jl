@@ -14,7 +14,7 @@ To construct an `AuxTag` of value "AB", you can use:
 * `AuxTag(UInt8('A'), UInt8('B'))`
 * `try_auxtag(UInt8('A'), UInt8('B'))`
 
-Thow an `AuxException` if the resulting AuxTag does not conform to the regex
+Throw an `AuxException` if the resulting AuxTag does not conform to the regex
 r"^[A-Za-z][A-Za-z0-9]\$".
 
 # Examples
@@ -54,12 +54,12 @@ function is_valid_auxtag(x::UInt8, y::UInt8)
 end
 
 """
-    try_augtax(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
+    try_augtag(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
 
 Like `AuxTag(a, b)`, but return nothing instead of throwing an exception if the
 tag is invalid.
 
-See also: [`AuxTag`]
+See also: [`AuxTag`](@ref)
 
 # Examples
 ```

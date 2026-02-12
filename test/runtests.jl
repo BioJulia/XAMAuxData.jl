@@ -5,6 +5,7 @@ using Test
 using MemoryViews: MemoryView
 using FormatSpecimens
 using StringViews: StringView
+using Aqua
 
 INT_TYPE_TO_CHAR = Dict(
     UInt8 => 'C',
@@ -508,7 +509,7 @@ end # SAM
             )
             aux = BAM.Auxiliary(rand(UInt8, 19), 20)
             merge!(aux, d1)
-            d2 = Dict(d1)
+            d2 = Dict(aux)
             @test d1 == d2
         end
 
@@ -723,6 +724,35 @@ end
         "Auxiliary String (type 'Z') can only contain bytes in re\"[ !-~]\".",
         SAM.Auxiliary(UInt8[], 1)["AB"] = "Rødgrød med fløde"
     )
+end
+
+@testset "Conversion from SAM to BAM" begin
+    kvs = Any[
+        AuxTag("VN") => 'i',
+        AuxTag("ab") => [0x02, 0x7a, 0xf1],
+        AuxTag("F1") => 1.5f0,
+        AuxTag("Ni") => 55,
+    ]
+    for (T1, T2) in [
+            (BAM.Auxiliary, SAM.Auxiliary),
+            (SAM.Auxiliary, BAM.Auxiliary),
+        ]
+        dst = T1(UInt8[], 1)
+        src = T2(UInt8[], 1)
+        dst["KA"] = 55
+        for (k, v) in kvs
+            src[k] = v
+        end
+        copy!(dst, src)
+
+        @test dst == Dict(kvs)
+    end
+end
+
+Aqua.test_all(XAMAuxData; ambiguities = false)
+
+if VERSION >= v"1.14.0-DEV.1695"
+    @test isempty(Test.detect_closure_boxes(XAMAuxData))
 end
 
 end # module
