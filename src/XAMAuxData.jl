@@ -141,14 +141,15 @@ end
 abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
 
 function striptype end
+
 function Base.copy(aux::AbstractAuxiliary)
     x = aux.x
-    v = if x isa Vector{UInt8}
-        x[aux.start:end]
+    T = striptype(typeof(aux))
+    return if x isa Vector{UInt8}
+        T(x[aux.start:end], 1)
     else
-        copy(MemoryView(aux))
+        T(copy(MemoryView(aux)))
     end
-    return striptype(typeof(aux))(v, 1)
 end
 
 function Base.length(aux::AbstractAuxiliary)::Int
@@ -400,8 +401,8 @@ function validate_hex(mem::ImmutableMemoryView{UInt8})::Bool
     good = true
     for byte in mem
         good &= byte in UInt8('0'):UInt8('9') ||
-            byte in UInt8('a'):UInt8('h') ||
-            byte in UInt8('A'):UInt8('H')
+            byte in UInt8('a'):UInt8('f') ||
+            byte in UInt8('A'):UInt8('F')
     end
     return good
 end

@@ -74,7 +74,7 @@ struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
 
     function Auxiliary(v::Vector{UInt8}, i::Integer)
         i = Int(i)::Int
-        ((i - 1) % UInt) > (length(v) % UInt) + 1 && error("Start index must be in 1:length(vector) + 1")
+        ((i - 1) % UInt) > (length(v) % UInt) && error("Start index must be in 1:length(vector) + 1")
         return new{Vector{UInt8}}(v, Int(i)::Int)
     end
 
@@ -207,7 +207,10 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
         is_printable_char(b) ? Char(b) : Errors.InvalidChar
     elseif type_tag == UInt8('i')
         isempty(mem) && return Errors.InvalidInt
-        n = tryparse(Int, StringView(mem); base = 10)
+        # Note: We only allow writing Int32 to align with SAM specs,
+        # but we allow reading Int64, in order to be liberal with what
+        # we parse
+        n = tryparse(Int64, StringView(mem); base = 10)
         n === nothing ? Errors.InvalidInt : n
     elseif type_tag == UInt8('f')
         n = tryparse(Float32, StringView(mem))

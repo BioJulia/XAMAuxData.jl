@@ -33,19 +33,17 @@ true
 ```
 
 # Extended help
-# Extended help
 Since fields of `Auxiliary` are lazily loaded, auxiliaries may contain invalid
 data even after successful construction.
 `Auxiliary` operates with two distinct notions of invalid data - malformedness
 and invalidness. See [`is_well_formed`](@ref) for their definitions.
-```
 """
 struct Auxiliary{T} <: AbstractAuxiliary{T}
     x::T
     start::Int
 
     function Auxiliary(v::Vector{UInt8}, i::Integer)
-        ((i - 1) % UInt) > (length(v) % UInt) + 1 && error("Start index must be in 1:length(vector) + 1")
+        ((i - 1) % UInt) > (length(v) % UInt) && error("Start index must be in 1:length(vector) + 1")
         return new{Vector{UInt8}}(v, Int(i)::Int)
     end
 
