@@ -14,7 +14,7 @@ using MemoryViews: MemoryViews, MemoryView, ImmutableMemoryView, DelimitedIterat
 using StringViews: StringView
 
 struct EncodedIterator <: AbstractEncodedIterator
-    x::DelimitedIterator{UInt8, Immutable}
+    x::DelimitedIterator{UInt8, Immutable, UInt8}
 end
 
 function Base.iterate(it::EncodedIterator, state::Int = 1)

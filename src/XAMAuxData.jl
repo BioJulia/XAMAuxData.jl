@@ -99,24 +99,14 @@ end
 
 as_aux_value(x::Hex) = x
 
-function as_aux_value(s::AbstractString)
-    cu = codeunits(s)
-    auxs = if MemoryViews.MemoryKind(typeof(cu)) isa MemoryViews.IsMemory
-        s
-    else
-        String(s)
-    end
-    # Take view of codeunits, because StringViews' codeunits return
-    # the underlying array, so this makes it work for StringViews,
-    # without having to implement MemoryView(::StringView), which would
-    # be piracy in this package.
-    mem = ImmutableMemoryView(codeunits(auxs))
-    if is_printable(mem)
-        auxs
-    else
-        throw(AuxException(Errors.InvalidString))
-    end
-    return auxs
+as_aux_value(s::AbstractString) = as_aux_value(String(s))
+
+function as_aux_value(
+        s::Union{String, SubString{String}, StringView, SubString{<:StringView}},
+    )
+    mem = ImmutableMemoryView(s)
+    is_printable(mem) || throw(AuxException(Errors.InvalidString))
+    return s
 end
 
 # Returns an AbstractVector{<:AUX_NUMBER_TYPES}
