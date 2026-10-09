@@ -189,16 +189,6 @@ julia> setindex_nonexisting!(v, 'k', "BA")
 """
 function setindex_nonexisting! end
 
-const ELTYPE_DICT = Dict(
-    UInt8('C') => UInt8,
-    UInt8('c') => Int8,
-    UInt8('S') => UInt16,
-    UInt8('s') => Int16,
-    UInt8('I') => UInt32,
-    UInt8('i') => Int32,
-    UInt8('f') => Float32,
-)
-
 is_printable_char(x::UInt8) = in(x, UInt8('!'):UInt8('~'))
 is_printable_char(c::Char) = '!' ≤ c ≤ '~'
 
