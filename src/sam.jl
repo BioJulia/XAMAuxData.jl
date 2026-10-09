@@ -2,7 +2,7 @@ module SAM
 
 # Default Julia methods throw with bad keys, but not bad values (which are simply an error value)
 
-import ..AuxTag, ..AbstractAuxiliary, ..ELTYPE_DICT, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
+import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
@@ -138,15 +138,39 @@ function Base.isvalid(aux::Auxiliary)
     return true
 end
 
+# Call `f(T)`, where `T` is the array element type given by `eltype_tag`,
+# or return `default` if the tag is invalid.
+# Branch on the tag instead of looking up the element type in a dict,
+# such that the element type is known statically, which is required
+# for compiling with `juliac --trim`.
+@inline function with_array_eltype(f, eltype_tag::UInt8, default)
+    return if eltype_tag == UInt8('C')
+        f(UInt8)
+    elseif eltype_tag == UInt8('c')
+        f(Int8)
+    elseif eltype_tag == UInt8('S')
+        f(UInt16)
+    elseif eltype_tag == UInt8('s')
+        f(Int16)
+    elseif eltype_tag == UInt8('I')
+        f(UInt32)
+    elseif eltype_tag == UInt8('i')
+        f(Int32)
+    elseif eltype_tag == UInt8('f')
+        f(Float32)
+    else
+        default
+    end
+end
+
 function load_array(mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
     isempty(mem) && return Errors.InvalidArrayEltype
     eltype_tag = @inbounds mem[1]
-    eltype = get(ELTYPE_DICT, eltype_tag, nothing)
-    isnothing(eltype) && return Errors.InvalidArrayEltype
-    return load_array(eltype, @inbounds mem[2:end])
+    data = @inbounds mem[2:end]
+    return with_array_eltype(T -> load_array(T, data), eltype_tag, Errors.InvalidArrayEltype)
 end
 
-function load_array(T::Type, mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
+function load_array(::Type{T}, mem::ImmutableMemoryView{UInt8})::Union{Memory, Error} where {T}
     isempty(mem) && return Memory{T}()
     length(mem) == 1 && return Errors.InvalidArray
     len = count(==(UInt8(',')), mem)
@@ -166,12 +190,11 @@ end
 function validate_array(mem::ImmutableMemoryView{UInt8})::Bool
     isempty(mem) && return false
     eltype_tag = @inbounds mem[1]
-    eltype = get(ELTYPE_DICT, eltype_tag, nothing)
-    isnothing(eltype) && return false
-    return validate_array(eltype, @inbounds mem[2:end])
+    data = @inbounds mem[2:end]
+    return with_array_eltype(T -> validate_array(T, data), eltype_tag, false)
 end
 
-function validate_array(T::Type, mem::ImmutableMemoryView{UInt8})::Bool
+function validate_array(::Type{T}, mem::ImmutableMemoryView{UInt8})::Bool where {T}
     isempty(mem) && return true
     length(mem) == 1 && return false
     @inbounds(mem[1]) == UInt8(',') || return false

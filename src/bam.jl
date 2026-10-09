@@ -2,7 +2,7 @@ module BAM
 
 import ..AuxTag, ..AbstractAuxiliary, ..Hex
 import ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
-import ..is_printable, ..ELTYPE_DICT, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
+import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
 import ..striptype, ..validate_hex, ..is_well_formed
 
@@ -180,17 +180,37 @@ function load_array(mem::ImmutableMemoryView{UInt8})
     # This might not be possible to hit in practise.
     length(mem) < 5 && return Errors.InvalidArray
     @inbounds begin
-        # The correctness of this byte has already been validated in the EncodedIterator
-        eltype = ELTYPE_DICT[mem[1]]
+        eltype_tag = mem[1]
         n_elements = mem[2] % UInt32 |
             (mem[3] % UInt32) << 8 |
             (mem[4] % UInt32) << 16 |
             (mem[5] % UInt32) << 24
     end
-    return load_array(eltype, n_elements, @inbounds mem[6:end])
+    data = @inbounds mem[6:end]
+    # Branch on the tag instead of looking up the element type in a dict,
+    # such that the element type is known statically, which is required
+    # for compiling with `juliac --trim`.
+    return if eltype_tag == UInt8('C')
+        load_array(UInt8, n_elements, data)
+    elseif eltype_tag == UInt8('c')
+        load_array(Int8, n_elements, data)
+    elseif eltype_tag == UInt8('S')
+        load_array(UInt16, n_elements, data)
+    elseif eltype_tag == UInt8('s')
+        load_array(Int16, n_elements, data)
+    elseif eltype_tag == UInt8('I')
+        load_array(UInt32, n_elements, data)
+    elseif eltype_tag == UInt8('i')
+        load_array(Int32, n_elements, data)
+    elseif eltype_tag == UInt8('f')
+        load_array(Float32, n_elements, data)
+    else
+        # Unreachable: This byte has already been validated in the EncodedIterator
+        Errors.InvalidArray
+    end
 end
 
-function load_array(T::Type, n_elements::UInt32, mem::ImmutableMemoryView{UInt8})
+function load_array(::Type{T}, n_elements::UInt32, mem::ImmutableMemoryView{UInt8}) where {T}
     res = reinterpret(T, mem)
     # Should not be possible, since the number of elements is used to determine
     # the memory size
