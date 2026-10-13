@@ -328,21 +328,37 @@ using .Errors: Errors, Error
 """
     Error
 
-Enum type representing errors returned when loading invalid auxiliary data
-values.
+Enum type representing corrupt auxiliary data.
 The errors are _nonexhaustive_ - more might be added in a non-breaking release.
+See [`is_well_formed`](@ref) for the distinction between malformed and invalid data.
 
-The following errors may contained in `AbstractAuxiliary` instead of the real
-value:
-* `InvalidTypeTag` (SAM only): An aux value with an unknown type
-* `InvalidArrayEltype` (SAM only): A `B` value with an unknown element type
-* `InvalidInt` (SAM only): An integer that is not a decimal number in the range of `Int64`
-* `InvalidFloat`: A float that is NaN or infinite, or, in SAM, which is not a decimal
-  number representable by a `Float32`
-* `InvalidChar`: Loading a `Char` not in `'!':'~'`
-* `InvalidString`: A string that contains a character not in `re"[ !-~]"`
-* `InvalidHex`: a `H` value with an odd number of symbols, or symbol not in `re"[0-9A-F]"`
-* `InvalidArray`: A malformed `B` value, or one containing an invalid element
+When loading an *invalid* value, e.g. with `getindex`, `get`, iteration or
+[`try_get`](@ref), one of these errors is returned instead of the value:
+* `InvalidTypeTag` (SAM): A value with an unknown type tag
+* `InvalidArrayEltype` (SAM): A `B` value with a missing or unknown element type
+* `InvalidChar`: An `A` value that is not a single character in `'!':'~'`
+* `InvalidInt` (SAM only): An `i` value that is not a decimal integer in the range of `Int64`
+* `InvalidFloat`: An `f` value that is NaN or infinite, or, in SAM, which is not a
+  decimal number representable as a finite `Float32`
+* `InvalidString`: A `Z` value containing a byte not in `re"[ !-~]"`
+* `InvalidHex`: An `H` value with an odd number of symbols, or a symbol not in `re"[0-9A-F]"`
+* `InvalidArray`: A `B` value containing a NaN or infinite float, or, in SAM, which is
+  not a comma-separated list of numbers representable by its element type
+
+If the auxiliary is *malformed*, most functions throw one of these errors wrapped in an
+`AuxException`, whereas [`try_get`](@ref) returns it:
+* `TooShortMemory`: A field is too short, e.g. because it is truncated
+* `InvalidAuxTag`: A field's key is not a valid [`AuxTag`](@ref)
+* `NoColons` (SAM only): A field is not of the form `XX:T:value`
+* `NoNullByte` (BAM only): A `Z` or `H` value is not null-terminated
+* `InvalidTypeTag` (BAM): A value with an unknown type tag
+* `InvalidArrayEltype` (BAM): A `B` value with an unknown element type
+
+In BAM, unknown type tags make the auxiliary malformed, because the length of the
+value cannot be determined.
+
+Errors are also thrown wrapped in an `AuxException` when attempting to write an invalid
+key or value, e.g. `InvalidInt` when writing an integer outside `[-2^31, 2^32)`.
 
 See also: [`Errors`](@ref)
 """

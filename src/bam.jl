@@ -42,6 +42,12 @@ and invalidness. See [`is_well_formed`](@ref) for their definitions.
 Values loaded from a mutable `Auxiliary` may be views into its data, and are
 invalidated by mutating the `Auxiliary`.
 See the section "Values may be views into the auxiliary" in the documentation.
+
+Keys are converted to [`AuxTag`](@ref) by all methods, including lookups such
+as `haskey` and `get`. Unlike `Dict`, which returns `false` from `haskey` for a key
+of the wrong type, these methods throw if the key cannot be converted to a valid
+`AuxTag`. Such a key is a type error by the caller: Use [`try_auxtag`](@ref) to
+check keys of unknown validity.
 """
 struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     x::T
