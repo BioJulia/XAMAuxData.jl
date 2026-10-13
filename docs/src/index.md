@@ -303,31 +303,37 @@ julia> parent(aux["AB"])
 ```
 
 ## Writing `Auxiliary`s to files
-Calling `MemoryView` on an `Auxiliary` will return a view of the underlying data.
-This data is guaranteed to be valid SAM/BAM auxiliary data:
+Calling `MemoryView` on an `Auxiliary` returns the exact bytes the `Auxiliary` reads from.
+Therefore, the data is valid SAM/BAM auxiliary data if and only if the `Auxiliary` is valid,
+as checked by [`isvalid`](@ref Base.isvalid(::XAMAuxData.AbstractAuxiliary)).
+Writing to a mutable `Auxiliary` never makes it invalid, since writing invalid keys or values
+throws an [`AuxException`](@ref) - with the exception of [`setindex_nonexisting!`](@ref)
+with a key already present in the `Auxiliary`.
+Hence, an `Auxiliary` created empty and only written to always produces valid data:
 
 ```jldoctest
-(field1, field2) = ("PG:A:n", "ca:i:-241")
-aux = SAM.Auxiliary(field1 * '\t' * field2)
-
-# Get a view of the data underlying `aux`.
-# This is guaranteed to be valid SAM data (and likewise for BAM)
 using MemoryViews
+aux = SAM.Auxiliary(UInt8[], 1)
+aux["PG"] = 'n'
+aux["ca"] = Int32(-241)
+
+# Get a view of the data that `aux` reads from.
+# Since `aux` was created empty and only written to, this is valid SAM data
+# (and likewise for BAM)
 mem = MemoryView(aux)
 
-# We make no guarantees about which order the two fields are,
-# but we DO guarantee the memory is a valid SAM aux data
+# We make no guarantees about the order of the two fields,
+# but we DO guarantee the memory is valid SAM aux data
 # with these two fields
 println(
   in(
     String(mem),
-    (field1 * '\t' * field2, field2 * '\t' * field1)
+    ("PG:A:n\tca:i:-241", "ca:i:-241\tPG:A:n")
   )
 )
 
 # output
 true
-
 ```
 
 ## Invalid data in `Auxiliaries`

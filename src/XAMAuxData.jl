@@ -4,7 +4,7 @@ using MemoryViews: MemoryViews, MemoryView, MutableMemoryView, ImmutableMemoryVi
 using StringViews: StringView
 
 export Hex, AuxTag, try_auxtag, try_get, SAM, BAM, is_well_formed, setindex_nonexisting!
-public Errors, Error
+public Errors, Error, AuxException
 
 # These are the numerical types supported by the BAM format, and by SAM arrays.
 const AUX_INTEGER_TYPES = Union{Int8, UInt8, Int16, UInt16, Int32, UInt32}
@@ -346,7 +346,7 @@ When loading an *invalid* value, e.g. with `getindex`, `get`, iteration or
   not a comma-separated list of numbers representable by its element type
 
 If the auxiliary is *malformed*, most functions throw one of these errors wrapped in an
-`AuxException`, whereas [`try_get`](@ref) returns it:
+[`AuxException`](@ref), whereas [`try_get`](@ref) returns it:
 * `TooShortMemory`: A field is too short, e.g. because it is truncated
 * `InvalidAuxTag`: A field's key is not a valid [`AuxTag`](@ref)
 * `NoColons` (SAM only): A field is not of the form `XX:T:value`
@@ -357,13 +357,32 @@ If the auxiliary is *malformed*, most functions throw one of these errors wrappe
 In BAM, unknown type tags make the auxiliary malformed, because the length of the
 value cannot be determined.
 
-Errors are also thrown wrapped in an `AuxException` when attempting to write an invalid
+Errors are also thrown wrapped in an [`AuxException`](@ref) when attempting to write an invalid
 key or value, e.g. `InvalidInt` when writing an integer outside `[-2^31, 2^32)`.
 
 See also: [`Errors`](@ref)
 """
 Error
 
+"""
+    AuxException(error::Error) <: Exception
+
+Exception thrown when encountering malformed auxiliary data, or when attempting
+to write an invalid key or value.
+The field `error` contains the [`Error`](@ref) describing the problem.
+
+# Examples
+```jldoctest
+julia> aux = SAM.Auxiliary("AB:i:1\tbad");
+
+julia> try
+           aux["XX"]
+       catch e
+           e.error
+       end
+TooShortMemory::Error = 0
+```
+"""
 struct AuxException <: Exception
     error::Error
 end
