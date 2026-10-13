@@ -54,7 +54,7 @@ function is_valid_auxtag(x::UInt8, y::UInt8)
 end
 
 """
-    try_augtag(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
+    try_auxtag(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
 
 Like `AuxTag(a, b)`, but return nothing instead of throwing an exception if the
 tag is invalid.
