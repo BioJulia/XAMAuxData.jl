@@ -34,6 +34,39 @@ end
     end
 
     @test sort!(AuxTag.(["XA", "X1", "ab", "AB"])) == AuxTag.(["AB", "X1", "XA", "ab"])
+
+    @testset "AbstractString interface" begin
+        t = AuxTag("Ab")
+        @test AuxTag(t) === t
+        @test String(t) == "Ab"
+        @test collect(t) == ['A', 'b']
+        @test length(t) == ncodeunits(t) == 2
+        @test codeunits(t) == codeunits("Ab")
+        @test isvalid(t)
+        @test [isvalid(t, i) for i in 0:3] == [false, true, true, false]
+        @test_throws BoundsError codeunit(t, 3)
+        @test t * "c" == "Abc"
+        @test sprint(print, t) == "Ab"
+        @test sprint(show, t) == "AuxTag(\"Ab\")"
+        @test convert(AuxTag, StringView(b"Ab")) === t
+    end
+
+    @testset "isequal and hash" begin
+        t = AuxTag("Ab")
+        for s in ["Ab", SubString("xAbx", 2, 3), StringView(b"Ab"), Test.GenericString("Ab"), AuxTag('A', 'b')]
+            @test t == s
+            @test s == t
+            @test isequal(t, s)
+            @test isequal(s, t)
+            @test hash(t) == hash(s)
+        end
+        for s in ["AB", "ab", "Abc", "", AuxTag("AB")]
+            @test !isequal(t, s)
+            @test !isequal(s, t)
+        end
+        @test Dict(t => 1)["Ab"] == 1
+        @test Dict("Ab" => 1)[t] == 1
+    end
 end
 
 @testset "SAM" begin
