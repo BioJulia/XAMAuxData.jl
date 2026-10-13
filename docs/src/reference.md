@@ -1,7 +1,7 @@
 ```@meta
 CurrentModule = XAMAuxData
 DocTestSetup = quote
-    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error, is_well_formed, setindex_nonexisting!, try_get
+    using XAMAuxData: BAM, SAM, AuxTag, Hex, Errors, Error, AuxException, is_well_formed, setindex_nonexisting!, try_get
 end
 ```
 
@@ -12,6 +12,7 @@ try_auxtag
 Hex
 Error
 Errors
+AuxException
 SAM.Auxiliary
 BAM.Auxiliary
 is_well_formed
