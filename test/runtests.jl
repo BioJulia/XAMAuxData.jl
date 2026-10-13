@@ -1148,6 +1148,12 @@ end
         BAM.Auxiliary("ABW123")["AB"],
     )
 
+    # Setting a value into a malformed aux throws the same exception in SAM and BAM
+    for (T, s) in [(SAM.Auxiliary, "AB:i:1\t"), (BAM.Auxiliary, "ABC\x01C")]
+        aux = T(collect(codeunits(s)), 1)
+        @test_throws XAMAuxData.AuxException(Errors.TooShortMemory) aux["CD"] = 'a'
+    end
+
     @test_throws(
         "Invalid array element type tag. Valid values are CcSsIif.",
         BAM.Auxiliary("ABBW1234")["AB"],
