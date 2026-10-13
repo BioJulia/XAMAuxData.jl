@@ -698,6 +698,58 @@ end
     @test_throws Exception try_get(aux, "1A")
 end
 
+@testset "BAM setindex! with start offset" begin
+    prefix = collect(b"prefix bytes")
+    for (old, new) in Any[
+            ("a long string" => "short"),
+            ("short" => "a much longer string"),
+            (Int32(5) => 0x01),
+            (0x01 => Int32(-5)),
+            (Int16[1, 2, 3] => UInt8[1]),
+        ]
+        v = copy(prefix)
+        aux = BAM.Auxiliary(v, length(v) + 1)
+        aux["AB"] = 'x'
+        aux["CD"] = old
+        aux["EF"] = Int16(-3)
+        aux["CD"] = new
+        @test v[1:length(prefix)] == prefix
+        @test isvalid(aux)
+        @test Dict(aux) == Dict(AuxTag("AB") => 'x', AuxTag("CD") => new, AuxTag("EF") => Int16(-3))
+    end
+end
+
+@testset "Iterating past malformed data terminates" begin
+    # Previously, SAM iteration looped forever after a malformed field
+    for str in ["AB:i:1\t", "AB:i:1\tbad\tCD:i:2", "\t", "bad"]
+        aux = SAM.Auxiliary(str)
+        @test collect(XAMAuxData.iter_encodings(aux))[end] isa XAMAuxData.Error
+        @test !haskey(aux, "QQ")
+    end
+end
+
+@testset "BAM iteration with invalid values yields pairs" begin
+    aux = BAM.Auxiliary("ABA\nCDC\x05")
+    @test collect(aux) == [AuxTag("AB") => Errors.InvalidChar, AuxTag("CD") => 0x05]
+    @test Dict(aux) == Dict(AuxTag("AB") => Errors.InvalidChar, AuxTag("CD") => 0x05)
+    @test sprint(show, MIME"text/plain"(), aux) isa String
+end
+
+@testset "SAM setindex! keeps old value on invalid input" begin
+    aux = SAM.Auxiliary(collect(codeunits("AB:i:1\tCD:Z:keep")), 1)
+    @test_throws XAMAuxData.AuxException aux["CD"] = "bad\tstring"
+    @test_throws XAMAuxData.AuxException aux["AB"] = typemax(Int64)
+    @test Dict(aux) == Dict(AuxTag("AB") => 1, AuxTag("CD") => "keep")
+end
+
+@testset "setindex_nonexisting! has methods for SAM and BAM" begin
+    for T in (SAM.Auxiliary, BAM.Auxiliary)
+        aux = T(UInt8[], 1)
+        @test XAMAuxData.setindex_nonexisting!(aux, 'k', "BA") === aux
+        @test aux["BA"] == 'k'
+    end
+end
+
 @testset "Exception types" begin
     @test_throws(
         "Not enough bytes remaining in Aux data to encode a full field",
@@ -797,6 +849,51 @@ end
     src["AB"] = typemax(UInt32)
     dst = copy!(SAM.Auxiliary(UInt8[], 1), src)
     @test dst["AB"] === Int64(typemax(UInt32))
+
+    # Existing fields are replaced, and data before the start is kept
+    for (T1, T2) in [(SAM.Auxiliary, BAM.Auxiliary), (BAM.Auxiliary, SAM.Auxiliary)]
+        src = T2(UInt8[], 1)
+        src["AB"] = Int32(1)
+        src["CD"] = "abc"
+        for old_fields in [[], ["XX" => 'x'], ["XX" => 'x', "AB" => 'y']]
+            v = collect(codeunits("prefix"))
+            dst = T1(v, 7)
+            for (k, x) in old_fields
+                dst[k] = x
+            end
+            copy!(dst, src)
+            @test String(v[1:6]) == "prefix"
+            @test dst == Dict(AuxTag("AB") => 1, AuxTag("CD") => "abc")
+            @test isvalid(dst)
+            copy!(dst, T2(UInt8[], 1))
+            @test isempty(dst)
+            @test v == codeunits("prefix")
+        end
+    end
+
+    # If copying fails, the destination is unchanged
+    bad_sources = [
+        (SAM.Auxiliary("AB:i:1\tCD:i:x"), Errors.InvalidInt), # invalid value
+        (SAM.Auxiliary("AB:i:1\tCD:Z:abc\tbad"), Errors.TooShortMemory), # malformed
+        (SAM.Auxiliary("AB:i:1\tCD:i:4294967296"), Errors.InvalidInt), # out of range
+        (BAM.Auxiliary("ABC\x01CDA\n"), Errors.InvalidChar), # invalid value
+        (BAM.Auxiliary("ABC\x01CDq\x01"), Errors.InvalidTypeTag), # malformed
+    ]
+    for (src, err) in bad_sources
+        T = src isa SAM.Auxiliary ? BAM.Auxiliary : SAM.Auxiliary
+        v = collect(codeunits("prefix"))
+        dst = T(v, 7)
+        dst["XX"] = 'x'
+        dst["YY"] = Int32(5)
+        old = copy(v)
+        @test try
+            copy!(dst, src)
+            false
+        catch e
+            e isa XAMAuxData.AuxException && e.error == err
+        end
+        @test v == old
+    end
 end
 
 Aqua.test_all(XAMAuxData; ambiguities = false)

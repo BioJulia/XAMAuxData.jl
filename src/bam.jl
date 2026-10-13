@@ -4,7 +4,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..Hex
 import ..AUX_NUMBER_TYPES, ..AUX_INTEGER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
-import ..striptype, ..validate_hex, ..is_well_formed, ..try_get
+import ..striptype, ..validate_hex, ..is_well_formed, ..try_get, ..setindex_nonexisting!
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -76,7 +76,6 @@ function Base.iterate(aux::Auxiliary, state::Int = 1)
     val isa Error && throw(AuxException(val))
     (key, typetag, span) = val
     value = load_auxvalue(typetag, @inbounds it.mem[span])
-    value isa Error && return (value, new_state)
     return (key => value, new_state)
 end
 
@@ -305,7 +304,8 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
             n_bytes_needed = bytes_needed(bam_val)
             if length(span) > n_bytes_needed
                 leftshift = length(span) - n_bytes_needed
-                deleteat!(aux.x, (first(span) - 1):(first(span) - 2 + leftshift))
+                offset = aux.start - 1
+                deleteat!(aux.x, (first(span) - 1 + offset):(first(span) - 2 + leftshift + offset))
                 # Shift right
             elseif length(span) < n_bytes_needed
                 rightshift = n_bytes_needed - length(span)
