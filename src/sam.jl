@@ -178,6 +178,79 @@ end
     end
 end
 
+# Julia's integer parser accepts more than the SAM specs, e.g. surrounding whitespace,
+# and is slower. Hence, we parse integers matching the regex `[-+]?[0-9]+` by hand.
+function parse_number(
+        ::Type{T}, mem::ImmutableMemoryView{UInt8}
+    )::Union{T, Nothing} where {T <: Union{Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64}}
+    len = length(mem)
+    iszero(len) && return nothing
+    b = @inbounds mem[1]
+    neg = b == UInt8('-')
+    i = 1 + (neg | (b == UInt8('+')))
+    i > len && return nothing
+    # Accumulate the absolute value, which fits in an UInt64 for all `T`
+    n = UInt64(0)
+    overflow = false
+    @inbounds while i <= len
+        d = mem[i] - UInt8('0')
+        d > 0x09 && return nothing
+        (n, o1) = Base.mul_with_overflow(n, UInt64(10))
+        (n, o2) = Base.add_with_overflow(n, d % UInt64)
+        overflow |= o1 | o2
+        i += 1
+    end
+    overflow && return nothing
+    return if neg
+        # The absolute value of typemin(T) is typemax(T) + 1
+        n > (T <: Signed ? (typemax(T) % UInt64) + 1 : UInt64(0)) && return nothing
+        (UInt64(0) - n) % T
+    else
+        n > typemax(T) % UInt64 && return nothing
+        n % T
+    end
+end
+
+# Julia's float parser accepts more than the SAM specs, e.g. surrounding whitespace,
+# hex floats, NaN and Inf. Hence, check the input is permitted by the SAM specs' regex
+# before parsing.
+function parse_number(::Type{Float32}, mem::ImmutableMemoryView{UInt8})::Union{Float32, Nothing}
+    is_sam_float(mem) || return nothing
+    # This may still return nothing, if the value is not representable as a Float32
+    return tryparse(Float32, StringView(mem))
+end
+
+# Check if `mem` matches the regex `[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?`
+function is_sam_float(mem::ImmutableMemoryView{UInt8})::Bool
+    i = skip_sign(mem, 1)
+    (i, n_int) = skip_digits(mem, i)
+    if i <= length(mem) && @inbounds(mem[i]) == UInt8('.')
+        (i, n_frac) = skip_digits(mem, i + 1)
+        iszero(n_frac) && return false
+    else
+        iszero(n_int) && return false
+    end
+    i > length(mem) && return true
+    @inbounds(mem[i]) in (UInt8('e'), UInt8('E')) || return false
+    (i, n_exp) = skip_digits(mem, skip_sign(mem, i + 1))
+    return !iszero(n_exp) && i > length(mem)
+end
+
+function skip_sign(mem::ImmutableMemoryView{UInt8}, i::Int)::Int
+    i > length(mem) && return i
+    b = @inbounds mem[i]
+    return i + ((b == UInt8('-')) | (b == UInt8('+')))
+end
+
+# Return the index after the digits starting at `i`, and the number of digits
+function skip_digits(mem::ImmutableMemoryView{UInt8}, i::Int)::Tuple{Int, Int}
+    start = i
+    while i <= length(mem) && @inbounds(mem[i]) in UInt8('0'):UInt8('9')
+        i += 1
+    end
+    return (i, i - start)
+end
+
 function load_array(mem::ImmutableMemoryView{UInt8})::Union{Memory, Error}
     isempty(mem) && return Errors.InvalidArrayEltype
     eltype_tag = @inbounds mem[1]
@@ -194,7 +267,7 @@ function load_array(::Type{T}, mem::ImmutableMemoryView{UInt8})::Union{Memory, E
     n = 0
     for ele_mem in split_each(@inbounds(mem[2:end]), UInt8(','))
         n += 1
-        val = tryparse(T, StringView(ele_mem))
+        val = parse_number(T, ele_mem)
         val === nothing && return Errors.InvalidArray
         @inbounds res[n] = val
 
@@ -214,7 +287,7 @@ function validate_array(::Type{T}, mem::ImmutableMemoryView{UInt8})::Bool where 
     length(mem) == 1 && return false
     @inbounds(mem[1]) == UInt8(',') || return false
     return all(split_each(@inbounds(mem[2:end]), UInt8(','))) do bytes
-        !isnothing(tryparse(T, StringView(bytes)))
+        !isnothing(parse_number(T, bytes))
     end
 end
 
@@ -224,9 +297,9 @@ function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bo
         b = @inbounds mem[1]
         is_printable_char(b)
     elseif type_tag == UInt8('i')
-        tryparse(Int64, StringView(mem); base = 10) !== nothing
+        parse_number(Int64, mem) !== nothing
     elseif type_tag == UInt8('f')
-        tryparse(Float32, StringView(mem)) !== nothing
+        parse_number(Float32, mem) !== nothing
     elseif type_tag == UInt8('Z')
         is_printable(mem)
     elseif type_tag == UInt8('H')
@@ -244,14 +317,13 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
         b = @inbounds mem[1]
         is_printable_char(b) ? Char(b) : Errors.InvalidChar
     elseif type_tag == UInt8('i')
-        isempty(mem) && return Errors.InvalidInt
         # Note: We only allow writing Int32 to align with SAM specs,
         # but we allow reading Int64, in order to be liberal with what
         # we parse
-        n = tryparse(Int64, StringView(mem); base = 10)
+        n = parse_number(Int64, mem)
         n === nothing ? Errors.InvalidInt : n
     elseif type_tag == UInt8('f')
-        n = tryparse(Float32, StringView(mem))
+        n = parse_number(Float32, mem)
         n === nothing ? Errors.InvalidFloat : n
     elseif type_tag == UInt8('Z')
         is_printable(mem) ? StringView(mem) : Errors.InvalidString

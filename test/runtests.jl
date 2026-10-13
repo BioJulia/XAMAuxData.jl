@@ -39,7 +39,7 @@ end
 @testset "SAM" begin
 
     @testset "Reading" begin
-        str = "AN:A:z\ta1:Z:abc def \tbc:H:a4e9\tkv:i:-25234\tzz:f:-14.466e-3\tAC:B:c,3,2,-34,25,62,-123"
+        str = "AN:A:z\ta1:Z:abc def \tbc:H:A4E9\tkv:i:-25234\tzz:f:-14.466e-3\tAC:B:c,3,2,-34,25,62,-123"
         aux = SAM.Auxiliary(str)
         d = Dict(aux)
 
@@ -111,7 +111,7 @@ end
     end
 
     @testset "Writing" begin
-        s = "AN:A:z\ta1:Z:abc def \tbc:H:a4e9\tkv:i:-25234\tzz:f:-14.466e-3\tAC:B:c,3,2,-34,25,62,-123"
+        s = "AN:A:z\ta1:Z:abc def \tbc:H:A4E9\tkv:i:-25234\tzz:f:-14.466e-3\tAC:B:c,3,2,-34,25,62,-123"
         cu = codeunits(s)
         mv = MemoryView(s)
         @test mv == cu
@@ -159,9 +159,40 @@ end
                     "0xaedc",
                     "\tKL:A:p",
                     "111122223333444455556666777788889999",
+                    "",
+                    "-",
+                    "+",
+                    "+-1",
+                    " 1",
+                    "1 ",
+                    "- 1",
+                    "1 2",
+                    "\u00a01",
+                    "1_000",
+                    "0b1",
+                    "1.0",
+                    "9223372036854775808",
+                    "-9223372036854775809",
+                    "18446744073709551616",
                 ]
                 aux = SAM.Auxiliary("AB:i:" * bad_data)
                 @test aux["AB"] == Errors.InvalidInt
+                @test !isvalid(aux)
+            end
+
+            for (good_data, x) in [
+                    "0" => 0,
+                    "-0" => 0,
+                    "+0" => 0,
+                    "+5" => 5,
+                    "007" => 7,
+                    "-123" => -123,
+                    "9223372036854775807" => typemax(Int64),
+                    "-9223372036854775808" => typemin(Int64),
+                ]
+                aux = SAM.Auxiliary("AB:i:" * good_data)
+                @test aux["AB"] === x
+                @test isvalid(aux)
             end
         end
 
@@ -185,9 +216,47 @@ end
                     "++++9.0",
                     "1.3e2F0",
                     "\tKL:A:p",
+                    " 1.0",
+                    "1.0 ",
+                    "- 1.0",
+                    "nan",
+                    "NaN",
+                    "inf",
+                    "-Inf",
+                    "Infinity",
+                    "0x1p3",
+                    "1.",
+                    ".",
+                    "",
+                    "-",
+                    "1e",
+                    "1e+",
+                    "e5",
+                    "1.0e5.0",
+                    "1e300",
                 ]
                 aux = SAM.Auxiliary("AB:f:" * bad_data)
                 @test aux["AB"] == Errors.InvalidFloat
+                @test !isvalid(aux)
+            end
+
+            for (good_data, x) in [
+                    "1" => 1.0f0,
+                    "-1.5" => -1.5f0,
+                    "+.5" => 0.5f0,
+                    "12.25e2" => 1225.0f0,
+                    "1E-2" => 0.01f0,
+                    "-3e+1" => -30.0f0,
+                ]
+                aux = SAM.Auxiliary("AB:f:" * good_data)
+                @test aux["AB"] === x
+                @test isvalid(aux)
+            end
+
+            for x in [NaN, -Inf, Inf32, NaN16, 1.0e300, big"1e300"]
+                aux = SAM.Auxiliary(UInt8[], 1)
+                @test_throws XAMAuxData.AuxException aux["AB"] = x
+                @test isempty(aux)
             end
         end
 
@@ -311,7 +380,7 @@ end
     end
 
     @testset "isvalid" begin
-        s = "ab:i:4\tka:A:m\ttp:f:0.2123\tmn:H:13af\tAC:B:c,3,2,-34,25,62,-123"
+        s = "ab:i:4\tka:A:m\ttp:f:0.2123\tmn:H:13AF\tAC:B:c,3,2,-34,25,62,-123"
         aux = SAM.Auxiliary(collect(codeunits(s)), 1)
         @test isvalid(aux)
     end
@@ -321,7 +390,7 @@ end # SAM
 @testset "BAM" begin
 
     @testset "Reading" begin
-        str = "ANAza1Zabc def \0bcHa4e9\0kvin\x9d\xff\xffzzf\xcd\x02m\xbcACBc\6\0\0\0\x03\x02\xde\x19>\x85"
+        str = "ANAza1Zabc def \0bcHA4E9\0kvin\x9d\xff\xffzzf\xcd\x02m\xbcACBc\6\0\0\0\x03\x02\xde\x19>\x85"
         aux = BAM.Auxiliary(str)
         d = Dict(aux)
 
@@ -443,8 +512,6 @@ end # SAM
             for i in [
                     Float16(-2843.23),
                     Float32(323.235),
-                    Float64(NaN),
-                    Float64(-Inf),
                     Float64(123.5),
                     pi,
                     MathConstants.e,
@@ -455,6 +522,20 @@ end # SAM
                 buf = IOBuffer()
                 write(buf, "KAf", x)
                 @test String(take!(buf)) == String(MemoryView(aux))
+            end
+
+            for x in [NaN, -Inf, Inf32, NaN16, 1.0e300]
+                aux = BAM.Auxiliary(UInt8[], 1)
+                @test_throws XAMAuxData.AuxException aux["AB"] = x
+                @test isempty(aux)
+            end
+
+            for x in [NaN32, Inf32, -Inf32]
+                buf = IOBuffer()
+                write(buf, "KAf", x)
+                aux = BAM.Auxiliary(take!(buf))
+                @test aux["KA"] == Errors.InvalidFloat
+                @test !isvalid(aux)
             end
         end
 
@@ -510,6 +591,30 @@ end # SAM
 
             aux = SAM.Auxiliary(b"JK:H:ae1bM9")
             @test aux["JK"] == Errors.InvalidHex
+
+            # Lowercase hex is not permitted by the SAM specs
+            for bad in ["ab", "0a", "Ab", "0G", "G0", " 0", "0 ", "ABC", "/0", ":0", "@0"]
+                aux = SAM.Auxiliary("JK:H:" * bad)
+                @test aux["JK"] == Errors.InvalidHex
+                @test !isvalid(aux)
+                aux = BAM.Auxiliary("JKH" * bad * "\0")
+                @test aux["JK"] == Errors.InvalidHex
+                @test !isvalid(aux)
+            end
+
+            aux = SAM.Auxiliary("JK:H:0123456789ABCDEF")
+            @test aux["JK"] == [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]
+            @test isvalid(aux)
+
+            # Test all bytes, and a length where the decoding loop SIMDs.
+            # Tabs are skipped, since they separate SAM fields.
+            for byte in 0x00:0xff
+                byte == UInt8('\t') && continue
+                expected = byte in codeunits("0123456789ABCDEF") ? fill(UInt8(parse(Int, Char(byte); base = 16) * 17), 32) : Errors.InvalidHex
+                aux = SAM.Auxiliary([codeunits("JK:H:"); fill(byte, 64)])
+                @test aux["JK"] == expected
+                @test isvalid(aux) == !(expected isa Errors.Error)
+            end
         end
 
         @testset "Round trip" begin
@@ -542,7 +647,7 @@ end # SAM
     end
 
     @testset "isvalid" begin
-        s = "abAcbbHafde01\0kaZabcdefgh\0kkC8mnBC\3\0\0\0abc"
+        s = "abAcbbHAFDE01\0kaZabcdefgh\0kkC8mnBC\3\0\0\0abc"
         aux = BAM.Auxiliary(collect(codeunits(s)), 1)
         @test isvalid(aux)
     end
@@ -621,9 +726,52 @@ end # BAM
                 "I,1,2,3,",
                 "I,1,-2,3",
                 "i,",
+                "C,0x10",
+                "f,1.0,nan",
+                "f,inf",
+                "f, 1.0",
+                "f,0x1p3",
+                "f,1e300",
+                "C, 1",
+                "C,1 ",
+                "i,1,,2",
+                "c,128",
+                "c,-129",
+                "I,-1",
+                "i,0x10",
             ]
             aux = SAM.Auxiliary("AB:B:" * bad_array)
             @test aux["AB"] == Errors.InvalidArray
+            @test !isvalid(aux)
+        end
+
+        for (good_array, expected) in Any[
+                "C,+5,-0,255" => UInt8[5, 0, 255],
+                "c,-128,127" => Int8[-128, 127],
+                "I,4294967295" => UInt32[typemax(UInt32)],
+                "i,-2147483648" => Int32[typemin(Int32)],
+                "f,-1.5,+.5,1E2" => Float32[-1.5, 0.5, 100],
+            ]
+            aux = SAM.Auxiliary("AB:B:" * good_array)
+            @test aux["AB"] == expected
+            @test eltype(aux["AB"]) == eltype(expected)
+            @test isvalid(aux)
+        end
+
+        for x in [NaN32, Inf32]
+            buf = IOBuffer()
+            write(buf, "ABBf", UInt32(2), 1.0f0, x)
+            aux = BAM.Auxiliary(take!(buf))
+            @test aux["AB"] == Errors.InvalidArray
+            @test !isvalid(aux)
+        end
+
+        for T in [SAM.Auxiliary, BAM.Auxiliary]
+            for v in [[1.0, NaN], Float32[Inf32], [1.0e300], Real[1, Inf]]
+                aux = T(UInt8[], 1)
+                @test_throws XAMAuxData.AuxException aux["AB"] = v
+                @test isempty(aux)
+            end
         end
 
         for T in [SAM.Auxiliary, BAM.Auxiliary]
@@ -960,14 +1108,9 @@ end
     )
 
     @test_throws(
-        "Data in SAM Auxiliary cannot be parsed as Float32.",
+        "Float is NaN, infinite or not representable as a Float32, or is not a decimal number in SAM.",
         SAM.Auxiliary(UInt8[], 1)["AB"] = 22.0e304,
     )
-    for x in (Inf64, -Inf64)
-        aux = SAM.Auxiliary(UInt8[], 1)
-        aux["AB"] = x
-        @test aux["AB"] === Float32(x)
-    end
 
     @test_throws(
         "Auxiliary String (type 'Z') can only contain bytes in re\"[ !-~]\".",

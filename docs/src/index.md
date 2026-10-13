@@ -164,21 +164,29 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
 | -------- | ---------------- |
 | `i`      | `Int64`*         |
 | `A`      | `Char`           |
-| `f`      | `Float32`        |
+| `f`      | `Float32`‡       |
 | `Z`      | `StringView`✝    |
-| `H`      | `Memory{UInt8}`  |
+| `H`      | `Memory{UInt8}`§ |
 | `B:C`    | `Memory{UInt8}`  |
 | `B:c`    | `Memory{Int8}`   |
 | `B:S`    | `Memory{UInt16}` |
 | `B:s`    | `Memory{Int16}`  |
 | `B:I`    | `Memory{UInt32}` |
 | `B:i`    | `Memory{Int32}`  |
-| `B:f`    | `Memory{Float32}`|
+| `B:f`    | `Memory{Float32}`‡|
 
 - `*` `Int64` is returned on all platforms. Values outside the range of `Int64`
-  are loaded as an [`Error`](@ref).
+  are loaded as an [`Error`](@ref). Integers, including those in `B` arrays, must match
+  the regex `[-+]?[0-9]+` given in the SAM specs. In particular, surrounding whitespace and
+  hexadecimal integers such as `0x10` are not permitted.
 - ✝ This is a parametric type. The precise concrete type depends on the type the view looks into,
   and is an implementation detail.
+- ‡ Floats must match the regex `[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?` given in the SAM specs.
+  In particular, NaN, infinity, hexadecimal floats such as `0x1p3`, and surrounding whitespace
+  are not permitted. Values which are not representable as a finite `Float32` are also loaded as an
+  [`Error`](@ref). Similarly, NaN and infinite floats are loaded as an `Error` in BAM.
+- § Hex values must match the regex `([0-9A-F][0-9A-F])*`. In particular, lowercase hex digits
+  are not permitted, in both SAM and BAM.
 
 ### Writing: SAM element types
 | Input type                                | SAM type stored |
@@ -201,7 +209,8 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
   can be represented in BAM, and therefore the realistic range of SAM integers.
   Other integer types, such as `Bool` and `BigInt`, cannot be written.
 - ✝ Permitted `Char` values are only those in `'!':'~'`.
-- ‡ These are converted to `Float32`. Only values representable by a `Float32` are allowed.
+- ‡ These are converted to `Float32`. NaN, infinite values, and values too large to be
+  represented as a finite `Float32` cannot be written, in both SAM and BAM.
 - § Only characters in `'!':'~'` and spaces (`' '`) are permitted in strings
 
 Arrays of integers must have one of the element types listed above.
