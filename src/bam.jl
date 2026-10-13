@@ -1,7 +1,7 @@
 module BAM
 
 import ..AuxTag, ..AbstractAuxiliary, ..Hex
-import ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
+import ..AUX_NUMBER_TYPES, ..AUX_INTEGER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
 import ..striptype, ..validate_hex, ..is_well_formed, ..try_get
@@ -283,10 +283,17 @@ function bytes_needed(x::AbstractVector{<:AUX_NUMBER_TYPES})
     return isempty(x) ? base : base + bytes_needed(@inbounds x[1]) * length(x)
 end
 
-as_bam_aux_value(x::AUX_NUMBER_TYPES) = x
+as_bam_aux_value(x::AUX_INTEGER_TYPES) = x
 
-as_bam_aux_value(x::Signed) = Int32(x)::Int32
-as_bam_aux_value(x::Unsigned) = UInt32(x)::UInt32
+# We do not choose an integer type on behalf of the user, since the
+# type is part of the BAM encoding.
+function as_bam_aux_value(::Integer)
+    throw(
+        ArgumentError(
+            "BAM integers must be of type Int8, UInt8, Int16, UInt16, Int32 or UInt32",
+        ),
+    )
+end
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
     key = convert(AuxTag, k)

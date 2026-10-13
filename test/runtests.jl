@@ -134,12 +134,23 @@ end
                     Int64(231435511),
                     UInt128(34311),
                     Int128(-391239931),
-                    BigInt(2033843841),
+                    typemin(Int32),
+                    typemax(UInt32),
                 ]
                 empty!(aux)
                 aux["AB"] = i
                 @test String(MemoryView(aux)) == "AB:i:" * string(i)
-                @test aux["AB"] === Int(i)
+                @test aux["AB"] === Int64(i)
+            end
+
+            # Only values in [-2^31, 2^32) can be written
+            for i in Any[Int64(typemin(Int32)) - 1, Int64(typemax(UInt32)) + 1, typemax(UInt64)]
+                @test_throws XAMAuxData.AuxException aux["AB"] = i
+            end
+
+            # Only bit integers can be written
+            for i in Any[true, BigInt(5)]
+                @test_throws ArgumentError aux["AB"] = i
             end
 
             for bad_data in [
@@ -370,14 +381,14 @@ end # SAM
     @testset "Mutating" begin
         aux = BAM.Auxiliary(UInt8[], 1)
         d = Dict{AuxTag, Any}()
-        for (k, v) in ["L1" => 15, "SO" => Int8[-5, 15, 18], "Xa" => "some string!", "f1" => Float32(-191.0001)]
+        for (k, v) in ["L1" => Int32(15), "SO" => Int8[-5, 15, 18], "Xa" => "some string!", "f1" => Float32(-191.0001)]
             d[k] = v
             aux[k] = v
         end
         @test Dict(aux) == d
 
         # Mutating existing dicts
-        for (k, v) in ["kk" => Float32(-14.24), "SO" => "abc ", "L1" => -11223344, "Xa" => UInt32[3, typemax(UInt32), 0]]
+        for (k, v) in ["kk" => Float32(-14.24), "SO" => "abc ", "L1" => Int32(-11223344), "Xa" => UInt32[3, typemax(UInt32), 0]]
             aux[k] = v
             d[k] = v
         end
@@ -419,8 +430,12 @@ end # SAM
                 @test String(MemoryView(aux)) == String(take!(buf))
             end
             empty!(aux)
-            aux["KX"] = BigInt(340932)
-            @test aux["KX"] === Int32(340932)
+
+            # Only integer types natively supported by BAM can be written
+            for n in Any[Int64(5), UInt64(5), Int128(5), BigInt(5), true]
+                @test_throws ArgumentError aux["KX"] = n
+            end
+            @test isempty(aux)
         end
 
         @testset "Floats and reals" begin
@@ -562,21 +577,14 @@ end # BAM
             empty!(aux)
         end
 
-        # Unsupported types
+        # Unsupported integer element types
         aux = T(rand(UInt8, 10), 11)
-        v = BigInt[-234432212, 2441, 2423133]
-        aux["P9"] = v
-        if T == SAM.Auxiliary
-            @test String(MemoryView(aux)) == "P9:B:i,-234432212,2441,2423133"
-            @test aux["P9"] isa Memory{Int32}
-        elseif T == BAM.Auxiliary
-            buf = IOBuffer()
-            write(buf, "P9Bi", Int32(length(v)), Int32.(v))
-            @test String(MemoryView(aux)) == String(take!(buf))
-        else
-            error()
+        for v in Any[BigInt[-234432212, 2441], Int64[1, 2], UInt64[1], Bool[true], Union{Int8, Int16}[Int8(1)]]
+            @test_throws ArgumentError aux["P9"] = v
         end
-        empty!(aux)
+        @test isempty(aux)
+
+        # Non-Float32 reals are converted to Float32
         mem = Memory{Irrational}(undef, 2)
         copyto!(mem, Irrational[pi, MathConstants.e])
         aux["Kk"] = view(mem, 1:lastindex(mem))
@@ -587,13 +595,6 @@ end # BAM
     @testset "Arrays of non-basic types" begin
         for T in [SAM.Auxiliary, BAM.Auxiliary]
             aux = T(rand(UInt8, 10), 11)
-            inp = BigInt[20, -400, 102]
-            aux["AB"] = inp
-            outp = aux["AB"]
-            @test outp isa (T == SAM.Auxiliary ? Memory{Int32} : AbstractVector{Int32})
-            @test outp == inp
-
-            empty!(aux)
             inp = [pi, MathConstants.e]
             aux["KV"] = inp
             outp = aux["KV"]
@@ -638,7 +639,7 @@ end
         @test Dict(empty(T)) == Dict(aux)
         @test length(aux) == 0
         @test isempty(aux)
-        aux["k1"] = 1234
+        aux["k1"] = Int32(1234)
         @test length(aux) == 1
         @test !isempty(aux)
         aux["v9"] = 'w'
@@ -739,7 +740,7 @@ end
     )
 
     @test_throws(
-        "Data in SAM Auxiliary cannot be parsed as base-ten Int32.",
+        "SAM integer cannot be parsed as base-ten Int64, or is not in [-2^31, 2^32) when writing or converting to BAM.",
         SAM.Auxiliary(UInt8[], 1)["AB"] = typemax(Int64)
     )
 
@@ -747,8 +748,11 @@ end
         "Data in SAM Auxiliary cannot be parsed as Float32.",
         SAM.Auxiliary(UInt8[], 1)["AB"] = 22.0e304,
     )
-    @test SAM.Auxiliary(UInt8[], 1)["AB"] = Inf64 isa Any
-    @test SAM.Auxiliary(UInt8[], 1)["AB"] = -Inf64 isa Any
+    for x in (Inf64, -Inf64)
+        aux = SAM.Auxiliary(UInt8[], 1)
+        aux["AB"] = x
+        @test aux["AB"] === Float32(x)
+    end
 
     @test_throws(
         "Auxiliary String (type 'Z') can only contain bytes in re\"[ !-~]\".",
@@ -761,7 +765,7 @@ end
         AuxTag("VN") => 'i',
         AuxTag("ab") => [0x02, 0x7a, 0xf1],
         AuxTag("F1") => 1.5f0,
-        AuxTag("Ni") => 55,
+        AuxTag("Ni") => Int32(55),
     ]
     for (T1, T2) in [
             (BAM.Auxiliary, SAM.Auxiliary),
@@ -769,7 +773,7 @@ end
         ]
         dst = T1(UInt8[], 1)
         src = T2(UInt8[], 1)
-        dst["KA"] = 55
+        dst["KA"] = Int32(55)
         for (k, v) in kvs
             src[k] = v
         end
@@ -777,6 +781,22 @@ end
 
         @test dst == Dict(kvs)
     end
+
+    # SAM integers are converted to the BAM type Int32 or UInt32
+    dst = BAM.Auxiliary(UInt8[], 1)
+    copy!(dst, SAM.Auxiliary("AB:i:-2147483648\tCD:i:2147483648\tEF:i:4294967295"))
+    @test dst["AB"] === typemin(Int32)
+    @test dst["CD"] === UInt32(2147483648)
+    @test dst["EF"] === typemax(UInt32)
+    for bad in ["AB:i:-2147483649", "AB:i:4294967296"]
+        @test_throws XAMAuxData.AuxException copy!(BAM.Auxiliary(UInt8[], 1), SAM.Auxiliary(bad))
+    end
+
+    # BAM UInt32 values can be converted to SAM
+    src = BAM.Auxiliary(UInt8[], 1)
+    src["AB"] = typemax(UInt32)
+    dst = copy!(SAM.Auxiliary(UInt8[], 1), src)
+    @test dst["AB"] === Int64(typemax(UInt32))
 end
 
 Aqua.test_all(XAMAuxData; ambiguities = false)
