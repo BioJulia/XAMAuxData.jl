@@ -80,14 +80,11 @@ function as_aux_value end
 as_sam_aux_value(x) = as_aux_value(x)
 as_bam_aux_value(x) = as_aux_value(x)
 
-as_aux_value(x::Float32) = x
-as_aux_value(x::Float16) = Float32(x)
-
-function as_aux_value(x::Real)
-    f = Float32(x)
-    if !isinf(x) & isinf(f)
-        throw(AuxException(Errors.InvalidFloat))
-    end
+# NaN and Inf are not permitted by the SAM specs, and floats too large to be
+# represented as a Float32 would be converted to Inf.
+function as_aux_value(x::Real)::Float32
+    f = Float32(x)::Float32
+    isfinite(f) || throw(AuxException(Errors.InvalidFloat))
     return f
 end
 
@@ -111,6 +108,10 @@ end
 # Returns an AbstractVector{<:AUX_NUMBER_TYPES}
 function as_aux_value(v::AbstractVector{<:Real})
     E = eltype(v)
+    if E === Float32
+        all(isfinite, v) || throw(AuxException(Errors.InvalidFloat))
+        return v
+    end
     E <: AUX_NUMBER_TYPES && isconcretetype(E) && return v
     # We do not choose an integer type on behalf of the user, since the
     # element type is part of the array's encoding.
@@ -123,7 +124,7 @@ function as_aux_value(v::AbstractVector{<:Real})
     end
     mem = Memory{Float32}(undef, length(v))
     for i in eachindex(v, mem)
-        mem[i] = Float32(v[i])::Float32
+        mem[i] = as_aux_value(v[i]::Real)::Float32
     end
     return mem
 end
@@ -279,7 +280,7 @@ module Errors
         # Only emitted when loading the value
         InvalidChar
         InvalidInt # SAM only
-        InvalidFloat # SAM only
+        InvalidFloat
         InvalidString
         InvalidArray
         InvalidHex
@@ -300,12 +301,13 @@ The following errors may contained in `AbstractAuxiliary` instead of the real
 value:
 * `InvalidTypeTag` (SAM only): An aux value with an unknown type
 * `InvalidArrayEltype` (SAM only): A `B` value with an unknown element type
-* `InvalidInt` (SAM only): An integer that can't be parsed to an `Int64`
-* `InvalidFloat` (SAM only): A float that can't be parsed to a `Float32`
+* `InvalidInt` (SAM only): An integer that is not a decimal number in the range of `Int64`
+* `InvalidFloat`: A float that is NaN or infinite, or, in SAM, which is not a decimal
+  number representable by a `Float32`
 * `InvalidChar`: Loading a `Char` not in `'!':'~'`
 * `InvalidString`: A string that contains a character not in `re"[ !-~]"`
 * `InvalidHex`: a `H` value with an odd number of symbols, or symbol not in `re"[0-9A-F]"`
-* `InvalidArray`: A malformed `B` value
+* `InvalidArray`: A malformed `B` value, or one containing an invalid element
 
 See also: [`Errors`](@ref)
 """
@@ -334,7 +336,7 @@ function Base.showerror(io::IO, error::AuxException)
     elseif inner == Errors.InvalidInt
         "SAM integer cannot be parsed as base-ten Int64, or is not in [-2^31, 2^32) when writing or converting to BAM."
     elseif inner == Errors.InvalidFloat
-        "Data in SAM Auxiliary cannot be parsed as Float32."
+        "Float is NaN, infinite or not representable as a Float32, or is not a decimal number in SAM."
     elseif inner == Errors.InvalidString
         "Auxiliary String (type 'Z') can only contain bytes in re\"[ !-~]\"."
     elseif inner == Errors.InvalidArray
@@ -360,13 +362,15 @@ function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
     isodd(len) && return Errors.InvalidHex
     reslen = div(len % UInt, 2) % Int
     hex = Memory{UInt8}(undef, reslen)
+    # Do not return early on bad bytes, such that this loop is branchless and SIMDs
+    bad = false
     @inbounds for i in 1:reslen
-        a = pack_hex(mem[2i - 1])
-        b = pack_hex(mem[2i])
-        (a | b) == 0xff && return Errors.InvalidHex
+        (a, bad_a) = unhex_nibble(mem[2i - 1])
+        (b, bad_b) = unhex_nibble(mem[2i])
+        bad |= bad_a | bad_b
         hex[i] = (a << 4) | b
     end
-    return hex
+    return bad ? Errors.InvalidHex : hex
 end
 
 """
@@ -544,27 +548,23 @@ See also: [`is_well_formed`](@ref)
 Base.isvalid(x::AbstractAuxiliary; check_duplicates::Bool = true) = throw(MethodError(isvalid, (x,)))
 
 function validate_hex(mem::ImmutableMemoryView{UInt8})::Bool
-    len = length(mem)
-    iseven(len) || return false
-    good = true
+    iseven(length(mem)) || return false
+    bad = false
     for byte in mem
-        good &= byte in UInt8('0'):UInt8('9') ||
-            byte in UInt8('a'):UInt8('f') ||
-            byte in UInt8('A'):UInt8('F')
+        bad |= last(unhex_nibble(byte))
     end
-    return good
+    return !bad
 end
 
-function pack_hex(a::UInt8)::UInt8 # 0xff for bad hex
-    return if a ∈ 0x30:0x39
-        a - 0x30
-    elseif a ∈ UInt8('A'):UInt8('F')
-        a - UInt8('A') + UInt8(10)
-    elseif a ∈ UInt8('a'):UInt8('f')
-        a - UInt8('a') + UInt8(10)
-    else
-        0xff
-    end
+# Decode a byte in `[0-9A-F]` to its value in 0:15, and return whether the byte
+# was bad. Lowercase is not permitted by the SAM specs.
+# This is branchless, such that loops using it can SIMD.
+@inline function unhex_nibble(u::UInt8)::Tuple{UInt8, Bool}
+    u -= UInt8('0')
+    # After subtracting '0', 'A':'F' becomes 0x11:0x16
+    letter = u > 0x09
+    bad = (u > 0x16) | (letter & (u < 0x11))
+    return (u - 0x07 * letter, bad)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", x::AbstractAuxiliary)

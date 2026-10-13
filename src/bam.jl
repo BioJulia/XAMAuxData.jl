@@ -102,9 +102,14 @@ function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bo
         length(mem) == 1 || return false
         b = @inbounds mem[1]
         is_printable_char(b)
-        # Binary numbers, or arrays of binary numbers cannot be invalid
-    elseif type_tag in (UInt8('c'), UInt8('C'), UInt8('s'), UInt8('S'), UInt8('I'), UInt8('i'), UInt8('f'), UInt8('B'))
+        # Binary integers, or arrays of binary integers cannot be invalid
+    elseif type_tag in (UInt8('c'), UInt8('C'), UInt8('s'), UInt8('S'), UInt8('I'), UInt8('i'))
         true
+    elseif type_tag == UInt8('f')
+        !(load_auxvalue(type_tag, mem) isa Error)
+    elseif type_tag == UInt8('B')
+        # Only float arrays can be invalid
+        @inbounds(mem[1]) != UInt8('f') || !(load_array(mem) isa Error)
     elseif type_tag == UInt8('H')
         zeropos = findnext(iszero, mem, 1)
         isnothing(zeropos) && return false
@@ -215,6 +220,8 @@ function load_array(::Type{T}, n_elements::UInt32, mem::ImmutableMemoryView{UInt
     # Should not be possible, since the number of elements is used to determine
     # the memory size
     length(res) == n_elements || return Errors.InvalidArray
+    # NaN and Inf are not permitted by the SAM specs
+    T === Float32 && !all(isfinite, res) && return Errors.InvalidArray
     return res
 end
 
@@ -239,7 +246,9 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
             elseif type_tag == UInt8('I')
                 ltoh(unsafe_load(Ptr{UInt32}(ptr)))
             elseif type_tag == UInt8('f')
-                ltoh(unsafe_load(Ptr{Float32}(ptr)))
+                f = ltoh(unsafe_load(Ptr{Float32}(ptr)))
+                # NaN and Inf are not permitted by the SAM specs
+                isfinite(f) ? f : Errors.InvalidFloat
             elseif type_tag == UInt8('Z')
                 # Compensate for null terminator byte
                 sm = @inbounds mem[1:(end - 1)]
