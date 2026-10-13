@@ -181,6 +181,17 @@ end
 
 abstract type AbstractAuxiliary{T} <: AbstractDict{AuxTag, Any} end
 
+# Shrinking the vector of a mutable Auxiliary to below `start - 1` elements is
+# not supported, but must cause an error, not out-of-bounds access, when mutating.
+function check_not_shrunk(aux::AbstractAuxiliary{Vector{UInt8}})
+    aux.start > length(aux.x) + 1 && throw_shrunk_error()
+    return nothing
+end
+
+@noinline function throw_shrunk_error()
+    error("Vector of mutable Auxiliary has been shrunk to below its start index")
+end
+
 function striptype end
 
 function Base.copy(aux::AbstractAuxiliary)
@@ -604,6 +615,7 @@ end
 # after the existing ones, and only remove the existing ones when all new fields
 # have been written.
 function copy_converted!(f, dst::AbstractAuxiliary{Vector{UInt8}}, src::AbstractAuxiliary)
+    check_not_shrunk(dst)
     data = dst.x
     oldlen = length(data)
     try

@@ -6,7 +6,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
-import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value, ..all_encodings
+import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value, ..all_encodings, ..check_not_shrunk
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -103,6 +103,7 @@ end
 MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
+    check_not_shrunk(x)
     resize!(x.x, x.start - 1)
     return x
 end
@@ -282,6 +283,7 @@ function as_sam_aux_value(x::BIT_INTEGERS)::Int64
 end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, key)
+    check_not_shrunk(aux)
     key = convert(AuxTag, key)::AuxTag
     return append_converted!(aux, unalias_value(aux.x, as_sam_aux_value(val)), key)
 end
@@ -332,6 +334,7 @@ function as_serialized_bytes(v::AbstractVector)
 end
 
 function Base.delete!(aux::MutableAuxiliary, k)
+    check_not_shrunk(aux)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
         v isa Error && throw(AuxException(v))
@@ -362,6 +365,7 @@ function Base.delete!(aux::MutableAuxiliary, k)
 end
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
+    check_not_shrunk(aux)
     key = convert(AuxTag, k)
     # Convert before deleting, such that the existing value is kept if `val` is invalid,
     # and unalias, such that deleting does not corrupt `val`.
