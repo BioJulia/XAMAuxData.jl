@@ -6,7 +6,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
-import ..is_well_formed, ..BIT_INTEGERS, ..try_get
+import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -69,6 +69,10 @@ Since fields of `Auxiliary` are lazily loaded, auxiliaries may contain invalid
 data even after successful construction.
 `Auxiliary` operates with two distinct notions of invalid data - malformedness
 and invalidness. See [`is_well_formed`](@ref) for their definitions.
+
+Values loaded from a mutable `Auxiliary` may be views into its data, and are
+invalidated by mutating the `Auxiliary`.
+See the section "Values may be views into the auxiliary" in the documentation.
 """
 struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     x::T
@@ -284,7 +288,7 @@ end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, key)
     key = convert(AuxTag, key)::AuxTag
-    return append_converted!(aux, as_sam_aux_value(val), key)
+    return append_converted!(aux, unalias_value(aux.x, as_sam_aux_value(val)), key)
 end
 
 # `v` must already have been converted with `as_sam_aux_value`
@@ -364,8 +368,9 @@ end
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
     key = convert(AuxTag, k)
-    # Convert before deleting, such that the existing value is kept if `val` is invalid
-    v = as_sam_aux_value(val)
+    # Convert before deleting, such that the existing value is kept if `val` is invalid,
+    # and unalias, such that deleting does not corrupt `val`.
+    v = unalias_value(aux.x, as_sam_aux_value(val))
     delete!(aux, key)
     return append_converted!(aux, v, key)
 end

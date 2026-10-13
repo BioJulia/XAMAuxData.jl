@@ -128,6 +128,49 @@ function as_aux_value(v::AbstractVector{<:Real})
     return mem
 end
 
+# Values loaded from an Auxiliary may be views into its data. If such a value is
+# written into a mutable Auxiliary, mutating its data before the value is written
+# would corrupt the value. To prevent this, we copy values that may share memory
+# with the Auxiliary. This is done by finding a memory view which contains all the
+# data of the value, and checking whether the memory regions overlap.
+# Values for which no such memory view can be found are assumed not to alias.
+
+# Return a `MemoryView` containing all memory of `x`, or `nothing`
+memory_of(x::Union{StringView, SubString{<:StringView}}) = ImmutableMemoryView(x)
+memory_of(x::Union{Vector, Memory, MemoryView}) = ImmutableMemoryView(x)
+memory_of(x::Hex) = memory_of(x.x)
+
+# Note: The parent may contain more memory than `x` itself, so this may produce
+# false positives, which only cause a needless copy.
+function memory_of(x::AbstractArray)
+    p = parent(x)
+    return p === x ? nothing : memory_of(p)
+end
+
+memory_of(::Any) = nothing
+
+function overlaps(a::MemoryView, b::MemoryView)::Bool
+    (isempty(a) | isempty(b)) && return false
+    return GC.@preserve a b begin
+        pa = UInt(pointer(a))
+        pb = UInt(pointer(b))
+        (pa < pb + sizeof(b)) & (pb < pa + sizeof(a))
+    end
+end
+
+overlaps(::MemoryView, ::Nothing) = false
+
+copy_value(x::AbstractString) = String(x)
+copy_value(x::AbstractVector) = collect(x)
+copy_value(x::Hex) = Hex(collect(x.x))
+
+# Return `v`, or a copy of `v` if it may share memory with `data`.
+# We check against all of `data`, not just the part used by the Auxiliary,
+# because mutating the Auxiliary may move data before its start.
+function unalias_value(data::Vector{UInt8}, v)
+    return overlaps(ImmutableMemoryView(data), memory_of(v)) ? copy_value(v) : v
+end
+
 function is_printable(v::AbstractVector{UInt8})
     res = true
     for b in v
