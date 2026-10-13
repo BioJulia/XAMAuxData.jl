@@ -80,7 +80,7 @@ end
         @test d == Dict(
             AuxTag("AN") => 'z',
             AuxTag("a1") => "abc def ",
-            AuxTag("bc") => UInt8[0xa4, 0xe9],
+            AuxTag("bc") => Hex(UInt8[0xa4, 0xe9]),
             AuxTag("zz") => -14.466f-3,
             AuxTag("AC") => Int8[3, 2, -34, 25, 62, -123],
             AuxTag("kv") => -25234,
@@ -140,7 +140,7 @@ end
 
         # Hex
         aux["kM"] = Hex([0x7a, 0xf1, 0x38])
-        @test aux["kM"] == [0x7a, 0xf1, 0x38]
+        @test aux["kM"] == Hex([0x7a, 0xf1, 0x38])
     end
 
     @testset "Writing" begin
@@ -365,18 +365,25 @@ end
         @test str isa StringView
         @test isempty(str)
         hex = aux["AZ"]
-        @test hex isa Memory{UInt8}
+        @test hex isa Hex{Memory{UInt8}}
         @test isempty(hex)
 
-        # Writing: Can't write zero-length hex, but can write zero-length string
+        # Writing zero-length strings and hex
         delete!(aux, "AZ")
         delete!(aux, "AB")
         aux["AB"] = ""
-        @test_throws Exception aux["AZ"] = Hex(UInt8[])
+        aux["AZ"] = Hex(UInt8[])
         str = aux["AB"]
         @test str isa StringView
         @test isempty(str)
-        @test_throws Exception aux["AZ"]
+        @test aux["AZ"] == Hex(UInt8[])
+        @test String(MemoryView(aux)) == "KL:i:-5\tKM:f:-19.1\tAB:Z:\tAZ:H:"
+
+        # Same in BAM
+        aux = BAM.Auxiliary(UInt8[], 1)
+        aux["AZ"] = Hex(UInt8[])
+        @test aux["AZ"] == Hex(UInt8[])
+        @test String(MemoryView(aux)) == "AZH\0"
     end
 
     @testset "Existing good files" begin
@@ -436,7 +443,7 @@ end # SAM
         @test d == Dict(
             AuxTag("AN") => 'z',
             AuxTag("a1") => "abc def ",
-            AuxTag("bc") => UInt8[0xa4, 0xe9],
+            AuxTag("bc") => Hex(UInt8[0xa4, 0xe9]),
             AuxTag("zz") => -14.466f-3,
             AuxTag("AC") => Int8[3, 2, -34, 25, 62, -123],
             AuxTag("kv") => -25234,
@@ -498,7 +505,7 @@ end # SAM
 
         # Hex
         aux["kM"] = Hex([0x7a, 0xf1, 0x38])
-        @test aux["kM"] == [0x7a, 0xf1, 0x38]
+        @test aux["kM"] == Hex([0x7a, 0xf1, 0x38])
 
         # Correct integer type
         for (k, v) in Any[
@@ -619,7 +626,7 @@ end # SAM
         @testset "Hex" begin
             aux = BAM.Auxiliary(UInt8[], 1)
             aux["LA"] = Hex([0x01, 0x02, 0x03, 0xaf])
-            @test aux["LA"] == [0x01, 0x02, 0x03, 0xaf]
+            @test aux["LA"] == Hex([0x01, 0x02, 0x03, 0xaf])
             @test String(MemoryView(aux)) == "LAH010203AF\0"
 
             aux = SAM.Auxiliary(b"JK:H:ae1bM9")
@@ -636,14 +643,14 @@ end # SAM
             end
 
             aux = SAM.Auxiliary("JK:H:0123456789ABCDEF")
-            @test aux["JK"] == [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]
+            @test aux["JK"] == Hex([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef])
             @test isvalid(aux)
 
             # Test all bytes, and a length where the decoding loop SIMDs.
             # Tabs are skipped, since they separate SAM fields.
             for byte in 0x00:0xff
                 byte == UInt8('\t') && continue
-                expected = byte in codeunits("0123456789ABCDEF") ? fill(UInt8(parse(Int, Char(byte); base = 16) * 17), 32) : Errors.InvalidHex
+                expected = byte in codeunits("0123456789ABCDEF") ? Hex(fill(UInt8(parse(Int, Char(byte); base = 16) * 17), 32)) : Errors.InvalidHex
                 aux = SAM.Auxiliary([codeunits("JK:H:"); fill(byte, 64)])
                 @test aux["JK"] == expected
                 @test isvalid(aux) == !(expected isa Errors.Error)
@@ -997,8 +1004,8 @@ end
         end
         h = Hex(aux["EF"])
         y = XAMAuxData.unalias_value(aux.x, h)
-        @test y.x !== h.x
-        @test y.x == h.x
+        @test parent(y) !== parent(h)
+        @test y isa Hex && y == h
 
         aux = SAM.Auxiliary(collect(codeunits("AB:Z:abc")), 1)
         x = aux["AB"]
@@ -1252,6 +1259,44 @@ end
 end
 
 Aqua.test_all(XAMAuxData; ambiguities = false)
+
+@testset "H values are loaded as Hex" begin
+    @test Hex([0x01, 0x02]) == Hex(Memory{UInt8}([0x01, 0x02]))
+    @test isequal(Hex([0x01, 0x02]), Hex(Memory{UInt8}([0x01, 0x02])))
+    @test hash(Hex([0x01, 0x02])) == hash(Hex(Memory{UInt8}([0x01, 0x02])))
+    @test Hex([0x01, 0x02]) != Hex([0x01, 0x03])
+
+    # Hex is an AbstractVector with the same content as its parent
+    v = [0x01, 0x02, 0x03]
+    h = Hex(v)
+    @test parent(h) === v
+    @test h == v
+    @test isequal(h, v)
+    @test hash(h) == hash(v)
+    @test length(h) == 3
+    @test h[2] == 0x02
+    @test_throws BoundsError h[4]
+    @test collect(h) == v
+    @test isempty(Hex(UInt8[]))
+
+    for (T, s) in [(SAM.Auxiliary, "AB:H:01AF\tCD:H:"), (BAM.Auxiliary, "ABH01AF\0CDH\0")]
+        v = collect(codeunits(s))
+        aux = T(v, 1)
+        @test aux["AB"] isa Hex{Memory{UInt8}}
+        @test aux["AB"] == Hex([0x01, 0xaf])
+
+        # Writing a loaded value back preserves the H type, also when empty
+        aux["AB"] = aux["AB"]
+        aux["CD"] = aux["CD"]
+        @test v == codeunits(T == SAM.Auxiliary ? "AB:H:01AF\tCD:H:" : "ABH01AF\0CDH\0")
+
+        # Converting between SAM and BAM also preserves the H type
+        U = T == SAM.Auxiliary ? BAM.Auxiliary : SAM.Auxiliary
+        dst = copy!(U(UInt8[], 1), aux)
+        @test dst["AB"] == Hex([0x01, 0xaf])
+        @test dst["CD"] isa Hex && isempty(dst["CD"])
+    end
+end
 
 @testset "Encoded iterator eltype" begin
     for aux in [SAM.Auxiliary("AB:i:1\tCD:Z:abc\tEF"), BAM.Auxiliary("ABC\1CDZabc\0EF")]

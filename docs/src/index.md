@@ -285,6 +285,23 @@ AB:B:C,1,2
 AB:H:0102
 ```
 
+When loaded, `H` values are returned as a `Hex{Memory{UInt8}}`, such that writing a loaded value back,
+or converting between SAM and BAM, preserves the `H` type.
+`Hex` is a minimal `AbstractVector{UInt8}`, which may hit slow fallback methods.
+Use `parent` to get the decoded bytes as a `Memory{UInt8}`:
+
+```jldoctest
+julia> aux = SAM.Auxiliary("AB:H:0102");
+
+julia> aux["AB"] == [0x01, 0x02]
+true
+
+julia> parent(aux["AB"])
+2-element Memory{UInt8}:
+ 0x01
+ 0x02
+```
+
 ## Writing `Auxiliary`s to files
 Calling `MemoryView` on an `Auxiliary` will return a view of the underlying data.
 This data is guaranteed to be valid SAM/BAM auxiliary data:
