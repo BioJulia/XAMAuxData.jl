@@ -6,7 +6,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
-import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value, ..all_encodings, ..check_not_shrunk
+import ..is_well_formed, ..BIT_INTEGERS, ..load_encoded, ..unalias_value, ..all_encodings, ..check_not_shrunk
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -121,30 +121,8 @@ function Base.iterate(aux::Auxiliary, state::Int = 1)
     return (key => value, new_state)
 end
 
-function Base.get(aux::Auxiliary, k, default)
-    key = convert(AuxTag, k)
-    it = iter_encodings(aux)
-    for i in it
-        i isa Error && throw(AuxException(i))
-        (auxtag, typetag, span) = i
-        if auxtag == key
-            return load_auxvalue(typetag, @inbounds it.x.v[span])
-        end
-    end
-    return default
-end
-
-function try_get(aux::Auxiliary, k)
-    key = convert(AuxTag, k)
-    it = iter_encodings(aux)
-    for i in it
-        i isa Error && return i
-        (auxtag, typetag, span) = i
-        if auxtag == key
-            return load_auxvalue(typetag, @inbounds it.x.v[span])
-        end
-    end
-    return nothing
+function load_encoded(aux::Auxiliary, (_, typetag, span)::Tuple{AuxTag, UInt8, UnitRange{Int}})
+    return load_auxvalue(typetag, @inbounds ImmutableMemoryView(aux)[span])
 end
 
 function Base.isvalid(aux::Auxiliary; check_duplicates::Bool = true)

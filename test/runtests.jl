@@ -856,6 +856,42 @@ end
     end
 end
 
+@testset "get with function and pop!" begin
+    for T in [SAM.Auxiliary, BAM.Auxiliary]
+        v = collect(codeunits("prefix"))
+        aux = T(v, 7)
+        aux["AB"] = "hello"
+        aux["CD"] = Int16[1, -2]
+        aux["EF"] = Hex([0x01, 0xff])
+        aux["GH"] = 'x'
+
+        @test get(() -> 0, aux, "AB") == "hello"
+        @test get(() -> 0, aux, "XX") === 0
+        @test get(Returns(0), aux, AuxTag("CD")) == Int16[1, -2]
+
+        # Popped values do not alias the deleted data
+        s = pop!(aux, "AB")
+        @test s == "hello"
+        @test !haskey(aux, "AB")
+        @test pop!(aux, "CD") == Int16[1, -2]
+        @test pop!(aux, "EF") == Hex([0x01, 0xff])
+        aux["IJ"] = "overwrites old data"
+        @test s == "hello"
+
+        @test pop!(aux, "XX", nothing) === nothing
+        @test_throws KeyError pop!(aux, "XX")
+        @test pop!(aux, "GH", nothing) === 'x'
+        @test collect(keys(aux)) == [AuxTag("IJ")]
+        @test v[1:6] == codeunits("prefix")
+    end
+
+    # Malformed data throws
+    aux = SAM.Auxiliary(collect(codeunits("AB:i:1\tbad")), 1)
+    @test get(() -> 0, aux, "AB") == 1
+    @test_throws XAMAuxData.AuxException get(() -> 0, aux, "XX")
+    @test_throws XAMAuxData.AuxException pop!(aux, "XX", 0)
+end
+
 @testset "try_get" begin
     # SAM
     aux = SAM.Auxiliary("KM:i:252\tAB:Z:αβγδ\tAK::C\tXY:i:1")

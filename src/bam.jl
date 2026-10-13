@@ -4,7 +4,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..Hex
 import ..AUX_NUMBER_TYPES, ..AUX_INTEGER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
-import ..striptype, ..validate_hex, ..is_well_formed, ..try_get, ..setindex_nonexisting!
+import ..striptype, ..validate_hex, ..is_well_formed, ..load_encoded, ..setindex_nonexisting!
 import ..unalias_value, ..all_encodings, ..check_not_shrunk
 
 public Auxiliary, AuxTag, Error, Errors
@@ -389,30 +389,8 @@ function write_auxvalue_typetag!(mem::MutableMemoryView{UInt8}, bam_val)
     end
 end
 
-function Base.get(aux::Auxiliary, k, default)
-    key = convert(AuxTag, k)
-    it = iter_encodings(aux)
-    for i in it
-        i isa Error && throw(AuxException(i))
-        (auxtag, typetag, span) = i
-        if auxtag == key
-            return load_auxvalue(typetag, @inbounds it.mem[span])
-        end
-    end
-    return default
-end
-
-function try_get(aux::Auxiliary, k)
-    key = convert(AuxTag, k)
-    it = iter_encodings(aux)
-    for i in it
-        i isa Error && return i
-        (auxtag, typetag, span) = i
-        if auxtag == key
-            return load_auxvalue(typetag, @inbounds it.mem[span])
-        end
-    end
-    return nothing
+function load_encoded(aux::Auxiliary, (_, typetag, span)::Tuple{AuxTag, UInt8, UnitRange{Int}})
+    return load_auxvalue(typetag, @inbounds ImmutableMemoryView(aux)[span])
 end
 
 end # module
