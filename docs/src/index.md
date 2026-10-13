@@ -138,53 +138,69 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
 ### Reading: SAM element types
 | SAM type | Julia type read  |
 | -------- | ---------------- |
-| `i`      | `Int`            |
+| `i`      | `Int64`*         |
 | `A`      | `Char`           |
 | `f`      | `Float32`        |
-| `Z`      | `StringView`*    |
+| `Z`      | `StringView`✝    |
 | `H`      | `Memory{UInt8}`  |
 | `B:C`    | `Memory{UInt8}`  |
 | `B:c`    | `Memory{Int8}`   |
 | `B:S`    | `Memory{UInt16}` |
-| `B:s`    | `Memory{Int8}`   |
+| `B:s`    | `Memory{Int16}`  |
 | `B:I`    | `Memory{UInt32}` |
 | `B:i`    | `Memory{Int32}`  |
 | `B:f`    | `Memory{Float32}`|
 
-* This is a parametric type. The precise concrete type depends on the type the view looks into,
+- `*` `Int64` is returned on all platforms. Values outside the range of `Int64`
+  are loaded as an [`Error`](@ref).
+- ✝ This is a parametric type. The precise concrete type depends on the type the view looks into,
   and is an implementation detail.
 
 ### Writing: SAM element types
-| Input type                       | SAM type stored |
-| -------------------------------- | --------------- |
-| `Integer`*                        | `i`             |
-| `AbstractChar`✝                   | `A`            |
-| `AbstractFloat`‡                  | `f`             |
-| `AbstractString`§                 | `Z`             |
-| `AbstractVector{UInt8}`           | `B:C`           |
-| `AbstractVector{Int8}`            | `B:c`           |
-| `AbstractVector{UInt16}`          | `B:S`           |
-| `AbstractVector{Int16}`           | `B:s`           |
-| `AbstractVector{<:Signed}`¶       | `B:i`           |
-| `AbstractVector{<:Unsigned}`¶     | `B:I`           |
-| `AbstractVector{<:AbstractFloat}`‡| `B:f`           |
-| `Hex`                             | `H`             |
+| Input type                                | SAM type stored |
+| ----------------------------------------- | --------------- |
+| `Int8`, `UInt8`, ..., `Int128`, `UInt128`* | `i`            |
+| `AbstractChar`✝                           | `A`             |
+| `Real`, except `Integer`‡                 | `f`             |
+| `AbstractString`§                         | `Z`             |
+| `AbstractVector{UInt8}`                   | `B:C`           |
+| `AbstractVector{Int8}`                    | `B:c`           |
+| `AbstractVector{UInt16}`                  | `B:S`           |
+| `AbstractVector{Int16}`                   | `B:s`           |
+| `AbstractVector{UInt32}`                  | `B:I`           |
+| `AbstractVector{Int32}`                   | `B:i`           |
+| `AbstractVector{<:Real}`, except integers‡ | `B:f`          |
+| `Hex`                                     | `H`             |
 
-- `*` Only values in `typemin(Int32):typemax(Int32)` are allowed.
-  This is because the SAM specs recommend to limit yourselves to this range of values.
-  However, when reading `i` fields, an `Int` is returned, such that values
-  outside the recommended range can still be read on 64-bit systems.
+- `*` Only values in the range `[-2^31, 2^32)` are allowed.
+  The SAM specs do not limit the size of integers, but this is the range that
+  can be represented in BAM, and therefore the realistic range of SAM integers.
+  Other integer types, such as `Bool` and `BigInt`, cannot be written.
 - ✝ Permitted `Char` values are only those in `'!':'~'`.
-- ‡ Only values representable by a `Float32` are allowed.
+- ‡ These are converted to `Float32`. Only values representable by a `Float32` are allowed.
 - § Only characters in `'!':'~'` and spaces (`' '`) are permitted in strings
-- ¶ These are stored as `Int32` and `UInt32` for `Signed` and `Unsigned`, respectively.
+
+Arrays of integers must have one of the element types listed above.
+In particular, an array with element type `Int` cannot be written,
+because the element type determines how the array is encoded.
+Convert the array to the desired element type before writing it:
+```jldoctest
+julia> aux = SAM.Auxiliary(UInt8[], 1);
+
+julia> aux["AB"] = Int32.([1, 2, 3]);
+
+julia> String(MemoryView(aux))
+"AB:B:i,1,2,3"
+```
 
 ### BAM element types
 #### BAM integers
 The main difference between SAM and BAM types is that the latter format permits different types of integers.
-Hence, except the types mentioned below, all the SAM types in the table above are also supported in BAM,
+Hence, except the integer types mentioned below, all the SAM types in the table above are also supported in BAM,
 with the same Julia <-> BAM type correspondance.
-Further, reading a value of `i` will return an `Int32` instead of an `Int`.
+
+Only the integer types below can be written to BAM. Other integer types, including `Int` (`Int64`)
+and `Bool`, must be converted to one of these types before being written:
 
 | Input type | BAM type | Julia type read|
 | -----------|----------|--------------- |
@@ -192,8 +208,11 @@ Further, reading a value of `i` will return an `Int32` instead of an `Int`.
 | `Int8`     | `c`      | `Int8`         |
 | `UInt16`   | `S`      | `UInt16`       |
 | `Int16`    | `s`      | `Int16`        |
-| `Unsigned` | `I`      | `UInt32`       |
-| `Signed`   | `i`      | `Int32`        |
+| `UInt32`   | `I`      | `UInt32`       |
+| `Int32`    | `i`      | `Int32`        |
+
+When converting from SAM to BAM using `copy!`, SAM integers are stored as `Int32`
+if possible, and otherwise as `UInt32`.
 
 #### BAM Arrays
 Whereas reading a SAM array (type `B`) will result in a `Memory`, BAM arrays only promise

@@ -222,7 +222,7 @@ function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bo
         b = @inbounds mem[1]
         is_printable_char(b)
     elseif type_tag == UInt8('i')
-        tryparse(Int, StringView(mem); base = 10) !== nothing
+        tryparse(Int64, StringView(mem); base = 10) !== nothing
     elseif type_tag == UInt8('f')
         tryparse(Float32, StringView(mem)) !== nothing
     elseif type_tag == UInt8('Z')
@@ -262,19 +262,21 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
     end
 end
 
-function as_sam_aux_value(x::Integer)::Int32
-    try
-        return Int32(x)::Int32
-    catch
-        throw(AuxException(Errors.InvalidInt))
-    end
+function as_sam_aux_value(::Integer)
+    throw(
+        ArgumentError(
+            "SAM integers must be of type Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Int128 or UInt128",
+        ),
+    )
 end
 
-function as_sam_aux_value(x::BIT_INTEGERS)::Int32
-    return if (x < typemin(Int32)) | (x > typemax(Int32))
+# The SAM specs do not limit the size of integers, but recommends the range
+# [-2^31, 2^32), since only this range can be represented in BAM.
+function as_sam_aux_value(x::BIT_INTEGERS)::Int64
+    return if (x < typemin(Int32)) | (x > typemax(UInt32))
         throw(AuxException(Errors.InvalidInt))
     else
-        x % Int32
+        x % Int64
     end
 end
 

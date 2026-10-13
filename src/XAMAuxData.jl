@@ -9,8 +9,9 @@ const unsafe = Unsafe()
 export Hex, AuxTag, try_auxtag, try_get, SAM, BAM, is_well_formed, setindex_nonexisting!
 public Errors, Error
 
-# These are the numerical types supported by the BAM format.
-const AUX_NUMBER_TYPES = Union{Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32}
+# These are the numerical types supported by the BAM format, and by SAM arrays.
+const AUX_INTEGER_TYPES = Union{Int8, UInt8, Int16, UInt16, Int32, UInt32}
+const AUX_NUMBER_TYPES = Union{AUX_INTEGER_TYPES, Float32}
 const BIT_INTEGERS = Union{UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, Int64, UInt128, Int128}
 
 include("auxtag.jl")
@@ -68,14 +69,12 @@ get_type_tag(::Type{UInt16}) = UInt8('S')
 get_type_tag(::Type{Int16}) = UInt8('s')
 get_type_tag(::Type{UInt32}) = UInt8('I')
 get_type_tag(::Type{Int32}) = UInt8('i')
+get_type_tag(::Type{Int64}) = UInt8('i') # SAM only
 get_type_tag(::Type{Float32}) = UInt8('f')
 get_type_tag(::Type{Char}) = UInt8('A')
 get_type_tag(::Type{<:AbstractString}) = UInt8('Z')
 get_type_tag(::Type{<:AbstractVector}) = UInt8('B')
 get_type_tag(::Type{<:Hex}) = UInt8('H')
-
-as_aux_type(::Type{<:Real}) = Float32
-as_aux_type(::Type{<:Integer}) = Int32
 
 function as_aux_value end
 as_sam_aux_value(x) = as_aux_value(x)
@@ -111,11 +110,20 @@ end
 
 # Returns an AbstractVector{<:AUX_NUMBER_TYPES}
 function as_aux_value(v::AbstractVector{<:Real})
-    eltype(v) != Union{} && eltype(v) <: AUX_NUMBER_TYPES && return v
-    E = as_aux_type(eltype(v))
-    mem = Memory{E}(undef, length(v))
+    E = eltype(v)
+    E <: AUX_NUMBER_TYPES && isconcretetype(E) && return v
+    # We do not choose an integer type on behalf of the user, since the
+    # element type is part of the array's encoding.
+    if E <: Integer
+        throw(
+            ArgumentError(
+                "Integer arrays must have element type Int8, UInt8, Int16, UInt16, Int32 or UInt32",
+            ),
+        )
+    end
+    mem = Memory{Float32}(undef, length(v))
     for i in eachindex(v, mem)
-        mem[i] = E(v[i])::E
+        mem[i] = Float32(v[i])::Float32
     end
     return mem
 end
@@ -238,7 +246,7 @@ The following errors may contained in `AbstractAuxiliary` instead of the real
 value:
 * `InvalidTypeTag` (SAM only): An aux value with an unknown type
 * `InvalidArrayEltype` (SAM only): A `B` value with an unknown element type
-* `InvalidInt` (SAM only): An integer that can't be parsed to an `Int32`
+* `InvalidInt` (SAM only): An integer that can't be parsed to an `Int64`
 * `InvalidFloat` (SAM only): A float that can't be parsed to a `Float32`
 * `InvalidChar`: Loading a `Char` not in `'!':'~'`
 * `InvalidString`: A string that contains a character not in `re"[ !-~]"`
@@ -270,7 +278,7 @@ function Base.showerror(io::IO, error::AuxException)
     elseif inner == Errors.InvalidChar
         "Auxiliary Char (type 'A') must be in '!':'~'."
     elseif inner == Errors.InvalidInt
-        "Data in SAM Auxiliary cannot be parsed as base-ten Int32."
+        "SAM integer cannot be parsed as base-ten Int64, or is not in [-2^31, 2^32) when writing or converting to BAM."
     elseif inner == Errors.InvalidFloat
         "Data in SAM Auxiliary cannot be parsed as Float32."
     elseif inner == Errors.InvalidString
@@ -461,10 +469,19 @@ Base.eltype(::Type{<:AbstractAuxiliary}) = Pair{AuxTag, Any}
 include("bam.jl")
 include("sam.jl")
 
+# SAM integers are loaded as `Int64`, which cannot be written to BAM
+sam_to_bam_value(x) = x
+
+function sam_to_bam_value(x::Int64)::Union{Int32, UInt32}
+    typemin(Int32) ≤ x ≤ typemax(Int32) && return x % Int32
+    0 ≤ x ≤ typemax(UInt32) && return x % UInt32
+    throw(AuxException(Errors.InvalidInt))
+end
+
 function Base.copy!(dst::BAM.MutableAuxiliary, src::SAM.Auxiliary)
     empty!(dst)
     for (auxtag, v) in src
-        BAM.setindex_nonexisting!(dst, v, auxtag)
+        BAM.setindex_nonexisting!(dst, sam_to_bam_value(v), auxtag)
     end
     return dst
 end
