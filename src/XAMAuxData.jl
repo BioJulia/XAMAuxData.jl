@@ -1,6 +1,6 @@
 module XAMAuxData
 
-using MemoryViews: MemoryViews, MemoryView, MutableMemoryView, ImmutableMemoryView
+using MemoryViews: MemoryViews, MemoryView, MutableMemoryView, ImmutableMemoryView, RefVector
 using StringViews: StringView
 
 struct Unsafe end
@@ -226,7 +226,7 @@ Same as `dst[key] = val`, but assumes that `key` is not present
 in `dst`.
 
 !!! warning
-    If `key` is in `dst`, this will result in a corrupt `dst`,
+    If `key` is in `dst`, this will result in a malformed `dst` with a duplicate key,
     which may cause invalid behaviour.
 
 # Examples
@@ -359,15 +359,22 @@ function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
 end
 
 """
-    is_well_formed(aux::AbstractAuxiliary) -> Bool
+    is_well_formed(aux::AbstractAuxiliary; check_duplicates::Bool = true) -> Bool
 
 Check if the auxiliary is well formed.
 `AbstractAuxiliary` distinguishes two ways their data can be incorrect:
-If the data is corrupted such that it is not possible to identify the key, or
-start/end of the encoded data of the value for a key/value pair, we say the
-auxiliary is malformed.
-Accessing values, or iterating such an auxiliary may or may not throw an exception.
+If the data is corrupted such that no loaded value can be trusted without checking
+the whole auxiliary, we say the auxiliary is malformed.
+This is the case if it is not possible to identify the key, or start/end of the
+encoded data of the value for a key/value pair, or if a key occurs more than once.
+Accessing values, or iterating such an auxiliary _may_ throw an exception, but is not
+guaranteed to. For example, loading a duplicated key may return any of its values.
 This notion of malformedness is what this function checks for.
+
+Checking for duplicate keys has a significant cost relative to the rest of this
+function. If `check_duplicates` is `false`, duplicate keys are not checked for.
+Only do this if you know `aux` has no duplicate keys, e.g. because its data was
+produced by a trusted source.
 
 Alternatively, if the keys and encoded values _can_ be identified, but the encoded
 values are corrupt and the value cannot be loaded, we say the auxiliary is invalid.
@@ -397,11 +404,71 @@ julia> (is_well_formed(aux), isvalid(aux))
 
 julia> aux["AB"] # note: numerical value of enum is not API
 InvalidString::Error = 9
+
+julia> aux = SAM.Auxiliary("AB:i:1\\tAB:i:2"); # duplicate key
+
+julia> is_well_formed(aux)
+false
+
+julia> is_well_formed(aux; check_duplicates = false)
+true
 ```
 """
-function is_well_formed(it::AbstractAuxiliary)
-    return all(iter_encodings(it)) do i
-        !isa(i, Error)
+function is_well_formed(aux::AbstractAuxiliary; check_duplicates::Bool = true)
+    # Note: This is faster than calling `all_encodings` with `check_duplicates = false`
+    check_duplicates || return all(i -> !isa(i, Error), iter_encodings(aux))
+    return all_encodings((_, _) -> true, aux, true)
+end
+
+# Check that `aux` is well-formed, i.e. that iterating its encodings yields no
+# `Error`, and, if `check_duplicates`, that it contains no duplicate keys,
+# and that `f(it, encoding)` returns `true` for all encodings, where `it` is the
+# `iter_encodings` iterator.
+# Duplicate keys are detected using a bitset with one bit per possible key.
+# The bitset is small enough to be stack allocated.
+function all_encodings(f, aux::AbstractAuxiliary, check_duplicates::Bool)::Bool
+    it = iter_encodings(aux)
+    if check_duplicates
+        bitset = RefVector{UInt64}(undef, N_TAG_BITSET_WORDS)
+        fill!(bitset, zero(UInt64))
+        for encoding in it
+            encoding isa Error && return false
+            add_to_tag_bitset!(bitset, first(encoding)) || return false
+            f(it, encoding) || return false
+        end
+    else
+        for encoding in it
+            encoding isa Error && return false
+            f(it, encoding) || return false
+        end
+    end
+    return true
+end
+
+# Map each valid tag to a distinct integer in 0:(59 * 75 - 1).
+# The first byte is a letter, and `& 0x3f` maps letters to distinct values in 1:58.
+# The second byte is in '0':'z', which subtracting '0' maps to 0:74.
+tag_bitset_index(tag::AuxTag) = Int(tag.x[1] & 0x3f) * 75 + Int(tag.x[2] - UInt8('0'))
+const N_TAG_BITSET_WORDS = cld(59 * 75, 64)
+
+# Add `tag` to the bitset, returning `false` if it was already present.
+# The bitset must not escape, since that prevents stack allocation. Therefore,
+# this is inlined, and uses pointers, since a bounds check (which may be forced
+# by `--check-bounds=yes`) would make the bitset escape in its error path.
+# This is safe, since all valid tags map to an index in the bitset.
+@inline function add_to_tag_bitset!(bitset::RefVector{UInt64}, tag::AuxTag)::Bool
+    index = tag_bitset_index(tag)
+    word_index = (index >>> 6) + 1
+    mask = UInt64(1) << (index & 63)
+    return GC.@preserve bitset begin
+        ptr = pointer(bitset)
+        word = unsafe_load(ptr, word_index)
+        if iszero(word & mask)
+            unsafe_store!(ptr, word | mask, word_index)
+            true
+        else
+            false
+        end
     end
 end
 
@@ -418,7 +485,8 @@ the value is invalid, or if `aux` is malformed before `key` is found.
 
 Unlike checking [`is_well_formed`](@ref) before indexing, this only scans the
 auxiliary data until `key` is found.
-Hence, if `key` is found, it is not checked whether data after `key` is malformed.
+Hence, if `key` is found, it is not checked whether data after `key` is malformed,
+for example, whether `key` occurs again.
 
 # Examples
 ```jldoctest
@@ -442,10 +510,12 @@ See also: [`is_well_formed`](@ref)
 function try_get end
 
 """
-    isvalid(aux::AbstractAuxiliary) -> Bool
+    isvalid(aux::AbstractAuxiliary; check_duplicates::Bool = true) -> Bool
 
 Check if the auxiliary is well formed, and that all the values can be loaded
 without returning an [`XAMAuxData.Error`](@ref).
+If `check_duplicates` is `false`, duplicate keys are not checked for.
+See [`is_well_formed`](@ref) for details.
 
 # Examples
 ```jldoctest
@@ -460,7 +530,7 @@ false
 
 See also: [`is_well_formed`](@ref)
 """
-Base.isvalid(x::AbstractAuxiliary) = throw(MethodError(isvalid, (x,)))
+Base.isvalid(x::AbstractAuxiliary; check_duplicates::Bool = true) = throw(MethodError(isvalid, (x,)))
 
 function validate_hex(mem::ImmutableMemoryView{UInt8})::Bool
     len = length(mem)

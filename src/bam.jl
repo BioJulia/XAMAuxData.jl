@@ -5,7 +5,7 @@ import ..AUX_NUMBER_TYPES, ..AUX_INTEGER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
 import ..striptype, ..validate_hex, ..is_well_formed, ..try_get, ..setindex_nonexisting!
-import ..unalias_value
+import ..unalias_value, ..all_encodings
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -90,15 +90,10 @@ end
 
 iter_encodings(aux::Auxiliary) = EncodedIterator(ImmutableMemoryView(aux))
 
-function Base.isvalid(aux::Auxiliary)
-    it = iter_encodings(aux)
-    for i in it
-        i isa Error && return false
-        (_, eltype, span) = i
-        mem = it.mem[span]
-        validate_encoding(eltype, mem) || return false
+function Base.isvalid(aux::Auxiliary; check_duplicates::Bool = true)
+    return all_encodings(aux, check_duplicates) do it, (_, eltype, span)
+        validate_encoding(eltype, @inbounds it.mem[span])
     end
-    return true
 end
 
 function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bool

@@ -1,6 +1,6 @@
 module XAMAuxDataTests
 
-using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, Errors, try_auxtag, try_get
+using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, Errors, try_auxtag, try_get, is_well_formed
 using Test
 using MemoryViews: MemoryView
 using FormatSpecimens
@@ -827,6 +827,64 @@ end
             aux["AB"] = StringView(MemoryView(v)[1:n])
             @test aux["AB"] == "a fairly long read name"
             @test String(v[1:n]) == "a fairly long read name"
+        end
+    end
+end
+
+@testset "Duplicate keys are malformed" begin
+    letters = [UInt8(c) for c in ['A':'Z'; 'a':'z']]
+    all_tags = [AuxTag(a, b) for a in letters for b in [letters; [UInt8(c) for c in '0':'9']]]
+    function make(T, tags)
+        aux = T(UInt8[], 1)
+        for tag in tags
+            XAMAuxData.setindex_nonexisting!(aux, 'x', tag)
+        end
+        return aux
+    end
+    for T in (SAM.Auxiliary, BAM.Auxiliary)
+        @test is_well_formed(make(T, all_tags))
+        @test isvalid(make(T, all_tags))
+        # Duplicates both among the first keys, and later
+        for n in [2, 5, 16, 17, 40, length(all_tags)], (i, j) in [(1, 2), (1, n), (n - 1, n)]
+            tags = all_tags[1:n]
+            tags[j] = tags[i]
+            aux = make(T, tags)
+            @test !is_well_formed(aux)
+            @test !isvalid(aux)
+            @test startswith(sprint(show, MIME"text/plain"(), aux), "Malformed")
+        end
+    end
+    @test !is_well_formed(SAM.Auxiliary("AB:i:1\tCD:Z:abc\tAB:i:1"))
+    @test !is_well_formed(BAM.Auxiliary("ABC\x01CDC\x02ABC\x01"))
+
+    # Opting out of checking for duplicates
+    for aux in [SAM.Auxiliary("AB:i:1\tCD:Z:abc\tAB:i:1"), BAM.Auxiliary("ABC\x01CDC\x02ABC\x01")]
+        @test is_well_formed(aux; check_duplicates = false)
+        @test isvalid(aux; check_duplicates = false)
+        @test !is_well_formed(aux; check_duplicates = true)
+        @test !isvalid(aux; check_duplicates = true)
+    end
+    # Other malformations and invalid values are still detected
+    for aux in [SAM.Auxiliary("AB:i:1\tAB:i:1\tX"), BAM.Auxiliary("ABC\x01ABC\x01XXq")]
+        @test !is_well_formed(aux; check_duplicates = false)
+        @test !isvalid(aux; check_duplicates = false)
+    end
+    for aux in [SAM.Auxiliary("AB:i:1\tAB:i:x"), BAM.Auxiliary("ABC\x01ABA\n")]
+        @test is_well_formed(aux; check_duplicates = false)
+        @test !isvalid(aux; check_duplicates = false)
+    end
+
+    # Checking for duplicates does not allocate.
+    # We only optimize codegen for Julia 1.13 and later.
+    if VERSION >= v"1.13"
+        for T in (SAM.Auxiliary, BAM.Auxiliary)
+            aux = make(T, all_tags[1:20])
+            is_well_formed(aux)
+            isvalid(aux)
+            for check_duplicates in (true, false)
+                @test @allocations(is_well_formed(aux; check_duplicates)) == 0
+                @test @allocations(isvalid(aux; check_duplicates)) == 0
+            end
         end
     end
 end

@@ -6,7 +6,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
-import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value
+import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value, ..all_encodings
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -146,15 +146,10 @@ function try_get(aux::Auxiliary, k)
     return nothing
 end
 
-function Base.isvalid(aux::Auxiliary)
-    it = iter_encodings(aux)
-    for i in it
-        i isa Error && return false
-        (_, eltype, span) = i
-        mem = it.x.v[span]
-        validate_encoding(eltype, mem) || return false
+function Base.isvalid(aux::Auxiliary; check_duplicates::Bool = true)
+    return all_encodings(aux, check_duplicates) do it, (_, eltype, span)
+        validate_encoding(eltype, @inbounds it.x.v[span])
     end
-    return true
 end
 
 # Call `f(T)`, where `T` is the array element type given by `eltype_tag`,
