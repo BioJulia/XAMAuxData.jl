@@ -479,17 +479,33 @@ function sam_to_bam_value(x::Int64)::Union{Int32, UInt32}
 end
 
 function Base.copy!(dst::BAM.MutableAuxiliary, src::SAM.Auxiliary)
-    empty!(dst)
-    for (auxtag, v) in src
-        BAM.setindex_nonexisting!(dst, sam_to_bam_value(v), auxtag)
-    end
-    return dst
+    return copy_converted!(sam_to_bam_value, dst, src)
 end
 
 function Base.copy!(dst::SAM.MutableAuxiliary, src::BAM.Auxiliary)
-    empty!(dst)
-    for (auxtag, v) in src
-        SAM.setindex_nonexisting!(dst, v, auxtag)
+    return copy_converted!(identity, dst, src)
+end
+
+# Replace the content of `dst` with the content of `src`, converting values with `f`.
+# To leave `dst` unchanged if an exception is thrown, we append the new fields
+# after the existing ones, and only remove the existing ones when all new fields
+# have been written.
+function copy_converted!(f, dst::AbstractAuxiliary{Vector{UInt8}}, src::AbstractAuxiliary)
+    data = dst.x
+    oldlen = length(data)
+    try
+        for (auxtag, v) in src
+            v isa Error && throw(AuxException(v))
+            setindex_nonexisting!(dst, f(v), auxtag)
+        end
+    catch
+        resize!(data, oldlen)
+        rethrow()
+    end
+    if oldlen >= dst.start
+        # In SAM, a tab separates the existing and the new fields
+        has_tab = dst isa SAM.MutableAuxiliary && length(data) > oldlen
+        deleteat!(data, dst.start:(oldlen + has_tab))
     end
     return dst
 end

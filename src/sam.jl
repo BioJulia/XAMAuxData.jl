@@ -22,7 +22,9 @@ function Base.iterate(it::EncodedIterator, state::Int = 1)
     isnothing(itval) && return nothing
     (mem, newstate) = itval
     parsed = parse_encoded_aux(mem)
-    parsed isa Error && return (parsed, length(it.x.v) + 1)
+    # Note: `it.x` yields a trailing empty element at state `length + 1`,
+    # so we must return a state beyond that to stop iteration.
+    parsed isa Error && return (parsed, length(it.x.v) + 2)
     (tag, eltype) = parsed
     span = (5 + state):(lastindex(mem) + state - 1)
     return ((tag, eltype, span), newstate)
@@ -282,7 +284,11 @@ end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, key)
     key = convert(AuxTag, key)::AuxTag
-    v = as_sam_aux_value(val)
+    return append_converted!(aux, as_sam_aux_value(val), key)
+end
+
+# `v` must already have been converted with `as_sam_aux_value`
+function append_converted!(aux::MutableAuxiliary, v, key::AuxTag)
     type_tag = get_type_tag(typeof(v))
     value_bytes = as_serialized_bytes(v)
     write_tab = !isempty(aux)
@@ -358,8 +364,10 @@ end
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
     key = convert(AuxTag, k)
+    # Convert before deleting, such that the existing value is kept if `val` is invalid
+    v = as_sam_aux_value(val)
     delete!(aux, key)
-    return setindex_nonexisting!(aux, val, key)
+    return append_converted!(aux, v, key)
 end
 
 end # module
