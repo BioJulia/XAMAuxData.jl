@@ -43,7 +43,7 @@ Values loaded from a mutable `Auxiliary` may be views into its data, and are
 invalidated by mutating the `Auxiliary`.
 See the section "Values may be views into the auxiliary" in the documentation.
 """
-struct Auxiliary{T} <: AbstractAuxiliary{T}
+struct Auxiliary{T <: AbstractVector{UInt8}} <: AbstractAuxiliary{T}
     x::T
     start::Int
 

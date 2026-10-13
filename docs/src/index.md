@@ -45,7 +45,7 @@ julia> aux = SAM.Auxiliary(data)
 The keys of an `Auxiliary` are instances of `AuxTag`.
 Why not simply have them be two-byte strings?
 `AuxTags` are compact bitstypes and therefore not heap-allocated for extra performance.
-Also, the construction of an `AugTax` validates that it conforms to the regex `[A-Za-z][A-Za-z0-9]` per the SAM specs.
+Also, the construction of an `AuxTag` validates that it conforms to the regex `[A-Za-z][A-Za-z0-9]` per the SAM specs.
 
 Strings can be converted to `AuxTag` for convenience, as in below:
 

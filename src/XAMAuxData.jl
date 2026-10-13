@@ -295,7 +295,7 @@ using .Errors: Errors, Error
 
 Enum type representing errors returned when loading invalid auxiliary data
 values.
-The errors are _nonexhausitve_ - more might be added in a non-breaking release.
+The errors are _nonexhaustive_ - more might be added in a non-breaking release.
 
 The following errors may contained in `AbstractAuxiliary` instead of the real
 value:
@@ -342,7 +342,7 @@ function Base.showerror(io::IO, error::AuxException)
     elseif inner == Errors.InvalidArray
         "Invalid array value. Not enough bytes available, or could not parse data to array element type."
     elseif inner == Errors.InvalidHex
-        "Auxiliary Hex (type 'H') contains data not parsable as hexidecimal bytes."
+        "Auxiliary Hex (type 'H') contains data not parsable as hexadecimal bytes."
     else
         @assert false # unreachable
     end
@@ -353,7 +353,7 @@ abstract type AbstractEncodedIterator end
 function iter_encodings end
 
 Base.IteratorSize(::Type{<:AbstractEncodedIterator}) = Base.SizeUnknown()
-Base.eltype(::Type{AbstractEncodedIterator}) = Union{Error, Tuple{AuxTag, UInt8, UnitRange{Int}}}
+Base.eltype(::Type{<:AbstractEncodedIterator}) = Union{Error, Tuple{AuxTag, UInt8, UnitRange{Int}}}
 
 function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
     len = length(mem)

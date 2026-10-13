@@ -1204,6 +1204,26 @@ end
 
 Aqua.test_all(XAMAuxData; ambiguities = false)
 
+@testset "Encoded iterator eltype" begin
+    for aux in [SAM.Auxiliary("AB:i:1\tCD:Z:abc\tEF"), BAM.Auxiliary("ABC\1CDZabc\0EF")]
+        it = XAMAuxData.iter_encodings(aux)
+        T = eltype(it)
+        @test T == Union{Errors.Error, Tuple{AuxTag, UInt8, UnitRange{Int}}}
+        elements = collect(it)
+        @test length(elements) == 3
+        @test all(x -> x isa T, elements)
+        @test last(elements) isa Errors.Error
+    end
+end
+
+@testset "Auxiliary type bounds" begin
+    for A in [SAM.Auxiliary, BAM.Auxiliary]
+        @test A{Vector{UInt8}} isa DataType
+        @test_throws TypeError A{Vector{Int}}
+        @test_throws TypeError A{String}
+    end
+end
+
 if VERSION >= v"1.14.0-DEV.1695"
     @test isempty(Test.detect_closure_boxes(XAMAuxData))
 end

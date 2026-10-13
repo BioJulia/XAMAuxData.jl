@@ -412,7 +412,7 @@ function Base.delete!(aux::MutableAuxiliary, k)
         v isa Error && throw(AuxException(v))
         (tag, _, span) = v
         if tag == key
-            # Delete also an adjecent tab if it's not the only element
+            # Delete also an adjacent tab if it's not the only element
             # And the leading 5 bytes e.g. "AB:i:"
             offset = aux.start - 1
             start_delete = first(span) - 5 + offset
