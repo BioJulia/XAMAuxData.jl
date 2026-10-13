@@ -872,8 +872,24 @@ end
     for str in ["AB:i:1\t", "AB:i:1\tbad\tCD:i:2", "\t", "bad"]
         aux = SAM.Auxiliary(str)
         @test collect(XAMAuxData.iter_encodings(aux))[end] isa XAMAuxData.Error
-        @test !haskey(aux, "QQ")
+        @test_throws XAMAuxData.AuxException haskey(aux, "QQ")
     end
+end
+
+@testset "length and haskey throw on malformed data" begin
+    for aux in [SAM.Auxiliary("AB:i:1\tbad\tEF:i:2"), BAM.Auxiliary("ABAxCDq\x01EFAy")]
+        @test !isempty(aux)
+        @test_throws XAMAuxData.AuxException length(aux)
+        # Keys before the malformed field are found, like with `get`
+        @test haskey(aux, "AB")
+        @test_throws XAMAuxData.AuxException haskey(aux, "EF")
+        @test_throws XAMAuxData.AuxException haskey(aux, "QQ")
+    end
+
+    # `isempty` only checks for zero bytes, so it never throws
+    aux = SAM.Auxiliary("\t")
+    @test !isempty(aux)
+    @test_throws XAMAuxData.AuxException length(aux)
 end
 
 @testset "BAM iteration with invalid values yields pairs" begin
