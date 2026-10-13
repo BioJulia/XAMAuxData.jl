@@ -218,14 +218,42 @@ function Base.length(aux::AbstractAuxiliary)::Int
     return n
 end
 
-# Like `get`, this throws if `aux` is malformed before `k` is found.
-function Base.haskey(aux::AbstractAuxiliary, k)::Bool
-    key = convert(AuxTag, k)
+# Return the encoding of `key` from `iter_encodings(aux)`, or `nothing` if not found.
+# Throw if `aux` is malformed before `key` is found.
+# Inlined, since the call overhead otherwise makes `get` ~10% slower.
+@inline function find_encoding(aux::AbstractAuxiliary, key::AuxTag)
     for i in iter_encodings(aux)
         i isa Error && throw(AuxException(i))
-        first(i) == key && return true
+        first(i) == key && return i
     end
-    return false
+    return nothing
+end
+
+Base.haskey(aux::AbstractAuxiliary, k)::Bool = !isnothing(find_encoding(aux, convert(AuxTag, k)))
+
+function Base.get(aux::AbstractAuxiliary, k, default)
+    encoding = find_encoding(aux, convert(AuxTag, k))
+    return isnothing(encoding) ? default : load_encoded(aux, encoding)
+end
+
+function Base.get(f::Base.Callable, aux::AbstractAuxiliary, k)
+    encoding = find_encoding(aux, convert(AuxTag, k))
+    return isnothing(encoding) ? f() : load_encoded(aux, encoding)
+end
+
+Base.pop!(aux::AbstractAuxiliary{Vector{UInt8}}, k) = pop_or!(() -> throw(KeyError(k)), aux, k)
+Base.pop!(aux::AbstractAuxiliary{Vector{UInt8}}, k, default) = pop_or!(() -> default, aux, k)
+
+# Since loaded values may be views into the data of `aux`, the value is unaliased
+# before it is deleted.
+function pop_or!(f, aux::AbstractAuxiliary{Vector{UInt8}}, k)
+    check_not_shrunk(aux)
+    key = convert(AuxTag, k)
+    encoding = find_encoding(aux, key)
+    isnothing(encoding) && return f()
+    value = unalias_value(aux.x, load_encoded(aux, encoding))
+    delete!(aux, key)
+    return value
 end
 
 function Base.keys(aux::AbstractAuxiliary)
@@ -358,6 +386,9 @@ end
 
 abstract type AbstractEncodedIterator end
 function iter_encodings end
+
+# Load the value of an encoding yielded by `iter_encodings(aux)`
+function load_encoded end
 
 Base.IteratorSize(::Type{<:AbstractEncodedIterator}) = Base.SizeUnknown()
 Base.eltype(::Type{<:AbstractEncodedIterator}) = Union{Error, Tuple{AuxTag, UInt8, UnitRange{Int}}}
@@ -527,7 +558,14 @@ true
 
 See also: [`is_well_formed`](@ref)
 """
-function try_get end
+function try_get(aux::AbstractAuxiliary, k)
+    key = convert(AuxTag, k)
+    for i in iter_encodings(aux)
+        i isa Error && return i
+        first(i) == key && return load_encoded(aux, i)
+    end
+    return nothing
+end
 
 """
     isvalid(aux::AbstractAuxiliary; check_duplicates::Bool = true) -> Bool
