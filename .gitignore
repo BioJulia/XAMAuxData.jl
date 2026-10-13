@@ -24,3 +24,10 @@ docs/site/
 Manifest.toml
 
 .DS_Store
+
+/plan.md
+/review.md
+/todo.md
+/PLAN.md
+/REVIEW.md
+/TODO.md
