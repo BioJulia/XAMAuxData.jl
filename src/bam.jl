@@ -5,7 +5,7 @@ import ..AUX_NUMBER_TYPES, ..AUX_INTEGER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
 import ..striptype, ..validate_hex, ..is_well_formed, ..try_get, ..setindex_nonexisting!
-import ..unalias_value, ..all_encodings
+import ..unalias_value, ..all_encodings, ..check_not_shrunk
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -67,6 +67,7 @@ const MutableAuxiliary = Auxiliary{Vector{UInt8}}
 MemoryViews.MemoryView(x::Auxiliary) = @inbounds MemoryView(x.x)[x.start:end]
 
 function Base.empty!(x::MutableAuxiliary)
+    check_not_shrunk(x)
     resize!(x.x, x.start - 1)
     return x
 end
@@ -257,6 +258,7 @@ function load_auxvalue(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})
 end
 
 function Base.delete!(aux::MutableAuxiliary, k)
+    check_not_shrunk(aux)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
         v isa Error && throw(AuxException(v))
@@ -295,6 +297,7 @@ function as_bam_aux_value(::Integer)
 end
 
 function Base.setindex!(aux::MutableAuxiliary, val, k)
+    check_not_shrunk(aux)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
         v isa Error && error("Cannot set value into invalid Auxiliary")
@@ -326,6 +329,7 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
 end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, k)
+    check_not_shrunk(aux)
     key = convert(AuxTag, k)
     bam_val = unalias_value(aux.x, as_bam_aux_value(val))
     n_bytes_needed = bytes_needed(bam_val)

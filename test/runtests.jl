@@ -750,6 +750,30 @@ end
     end
 end
 
+@testset "Mutating after vector is shrunk below start errors" begin
+    for T in (SAM.Auxiliary, BAM.Auxiliary)
+        v = collect(b"prefix bytes")
+        aux = T(v, length(v) + 1)
+        aux["AB"] = 'x'
+        resize!(v, 3)
+        @test isempty(aux)
+        @test_throws ErrorException empty!(aux)
+        @test_throws ErrorException delete!(aux, "AB")
+        @test_throws ErrorException aux["AB"] = 'y'
+        @test_throws ErrorException XAMAuxData.setindex_nonexisting!(aux, 'y', "AB")
+        @test_throws ErrorException copy!(aux, (T === SAM.Auxiliary ? BAM : SAM).Auxiliary(UInt8[], 1))
+        @test v == b"pre"
+
+        # Shrinking to exactly `start - 1` elements is fine
+        v = collect(b"prefix")
+        aux = T(v, length(v) + 1)
+        aux["AB"] = 'x'
+        resize!(v, 6)
+        aux["CD"] = 'y'
+        @test collect(aux) == [AuxTag("CD") => 'y']
+    end
+end
+
 @testset "Writing values aliasing the auxiliary" begin
     # Whether aliasing values are corrupted when mutating depends on how
     # Base moves data in the vector, so we test both that aliasing is detected,
