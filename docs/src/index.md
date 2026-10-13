@@ -310,10 +310,12 @@ there is no mandatory validation of the data done when constructing an `Auxiliar
 Hence, they may contain invalid data.
 This package distinguishes two different kinds of bad data:
 
-1. If the data is malformed in such a way that it's not possible to identify
-   the keys of the auxiliary, or the data segment of the corresponding values,
-   we say the auxiliary is malformed.
-   Loading keys or values from malformed auxiliaries _may_ throw an exception.
+1. If the data is malformed in such a way that no loaded value can be trusted without
+   checking the whole auxiliary, we say the auxiliary is malformed.
+   This is the case if it's not possible to identify the keys of the auxiliary,
+   or the data segment of the corresponding values, or if a key occurs more than once.
+   Loading keys or values from malformed auxiliaries _may_ throw an exception,
+   but is not guaranteed to. For example, loading a duplicated key may return any of its values.
    The function [`is_well_formed`](@ref) can be used to check for malformed auxiliaries.
 
 2. If the keys and the data segments corresponding to the values _can_ be identified,
@@ -341,4 +343,11 @@ julia> (is_well_formed(aux), isvalid(aux))
 
 julia> only(values(aux)) isa Error
 true
+
+julia> # Keys and values can be identified, but the key AB occurs twice
+
+julia> aux = SAM.Auxiliary("AB:i:1\tAB:i:2");
+
+julia> (is_well_formed(aux), isvalid(aux))
+(false, false)
 ```
