@@ -309,7 +309,7 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
     check_not_shrunk(aux)
     key = convert(AuxTag, k)
     for v in iter_encodings(aux)
-        v isa Error && error("Cannot set value into invalid Auxiliary")
+        v isa Error && throw(AuxException(v))
         (tag, type_tag, span) = v
         if tag == key
             bam_val = unalias_value(aux.x, as_bam_aux_value(val))
