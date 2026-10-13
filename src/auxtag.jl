@@ -1,12 +1,14 @@
 """
-    AuxTag(::Union{String, SubString{String}})
+    AuxTag(::AbstractString)
     AuxTag(::Char, ::Char)
     AuxTag(::UInt8, ::UInt8)
 
-The type of a key of `Auxiliary`. This type is lightweight, and validates
-that the key is of appropriate format.
-`Auxiliary` can also be modified using strings as keys, which will be converted
-to `AuxTag`, but this may cause a needless allocation of the string.
+The type of a key of `Auxiliary`. This type is a lightweight two-character
+`AbstractString`, and validates that the key is of appropriate format.
+Like other strings, it compares and hashes equal to strings with the same
+content, e.g. `isequal(AuxTag("AB"), "AB")`.
+`Auxiliary` can also be indexed using other strings as keys, which will be
+converted to `AuxTag`.
 
 To construct an `AuxTag` of value "AB", you can use:
 * `AuxTag("AB")`
@@ -30,7 +32,7 @@ ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]\$".
 [...]
 ```
 """
-struct AuxTag
+struct AuxTag <: AbstractString
     x::Tuple{UInt8, UInt8}
 
     function AuxTag(::Unsafe, x::UInt8, y::UInt8)
@@ -38,9 +40,22 @@ struct AuxTag
     end
 end
 
-# Makes testing easier
+# AbstractString interface. Valid tags are ASCII, so each byte is one char.
+Base.ncodeunits(::AuxTag) = 2
+Base.codeunit(::AuxTag) = UInt8
+Base.codeunit(x::AuxTag, i::Int) = x.x[i]
+Base.isvalid(::AuxTag, i::Int) = in(i, 1:2)
+Base.length(::AuxTag) = 2
+
+function Base.iterate(x::AuxTag, i::Int = 1)
+    in(i, 1:2) || return nothing
+    return (Char(@inbounds x.x[i]), i + 1)
+end
+
+# Faster than the generic AbstractString methods.
+# Hashing falls back to the AbstractString method, so it's consistent with `String`.
+Base.:(==)(x::AuxTag, y::AuxTag) = x.x == y.x
 Base.isless(x::AuxTag, y::AuxTag) = isless(x.x, y.x)
-Base.isequal(x::AuxTag, y::Union{String, SubString{String}}) = x == try_auxtag(y)
 
 AuxTag(x) = @something try_auxtag(x) throw(AuxException(Errors.InvalidAuxTag))
 AuxTag(a, b) = @something try_auxtag(a, b) throw(AuxException(Errors.InvalidAuxTag))
@@ -100,17 +115,13 @@ function try_auxtag(x::Union{String, SubString{String}})
     return try_auxtag(cu1, cu2)
 end
 
+try_auxtag(x::AuxTag) = x
+
 function try_auxtag(str::AbstractString)
     (x, s) = @something iterate(str) return nothing
     (y, s) = @something iterate(str, s) return nothing
     isnothing(iterate(str, s)) || return nothing
     return try_auxtag(Char(x)::Char, Char(y)::Char)
-end
-
-# We don't want convert to allocate (since it's called implicitly), so
-# we only accept string types that can efficiently be converted to tags
-function Base.convert(::Type{AuxTag}, x::Union{String, SubString{String}})
-    return AuxTag(x)
 end
 
 Base.print(io::IO, x::AuxTag) = write(io, x.x[1], x.x[2])
