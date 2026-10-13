@@ -5,6 +5,7 @@ import ..AUX_NUMBER_TYPES, ..AUX_INTEGER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
 import ..striptype, ..validate_hex, ..is_well_formed, ..try_get, ..setindex_nonexisting!
+import ..unalias_value
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -37,6 +38,10 @@ Since fields of `Auxiliary` are lazily loaded, auxiliaries may contain invalid
 data even after successful construction.
 `Auxiliary` operates with two distinct notions of invalid data - malformedness
 and invalidness. See [`is_well_formed`](@ref) for their definitions.
+
+Values loaded from a mutable `Auxiliary` may be views into its data, and are
+invalidated by mutating the `Auxiliary`.
+See the section "Values may be views into the auxiliary" in the documentation.
 """
 struct Auxiliary{T} <: AbstractAuxiliary{T}
     x::T
@@ -300,7 +305,7 @@ function Base.setindex!(aux::MutableAuxiliary, val, k)
         v isa Error && error("Cannot set value into invalid Auxiliary")
         (tag, type_tag, span) = v
         if tag == key
-            bam_val = as_bam_aux_value(val)
+            bam_val = unalias_value(aux.x, as_bam_aux_value(val))
             n_bytes_needed = bytes_needed(bam_val)
             if length(span) > n_bytes_needed
                 leftshift = length(span) - n_bytes_needed
@@ -327,7 +332,7 @@ end
 
 function setindex_nonexisting!(aux::MutableAuxiliary, val, k)
     key = convert(AuxTag, k)
-    bam_val = as_bam_aux_value(val)
+    bam_val = unalias_value(aux.x, as_bam_aux_value(val))
     n_bytes_needed = bytes_needed(bam_val)
     data = aux.x
     old_len = length(data)

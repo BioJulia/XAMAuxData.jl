@@ -750,6 +750,87 @@ end
     end
 end
 
+@testset "Writing values aliasing the auxiliary" begin
+    # Whether aliasing values are corrupted when mutating depends on how
+    # Base moves data in the vector, so we test both that aliasing is detected,
+    # and some cases which are known to have corrupted data before.
+    @testset "Detection" begin
+        v = collect(codeunits("prefix"))
+        aux = BAM.Auxiliary(v, length(v) + 1)
+        aux["AB"] = "abc"
+        aux["CD"] = Int16[1, -2, 3]
+        aux["EF"] = UInt8[4, 5, 6]
+        values = Any[
+            aux["AB"],
+            SubString(aux["AB"], 2, 3),
+            aux["CD"],
+            view(aux["CD"], 2:3),
+            aux["EF"],
+            StringView(MemoryView(v)[1:6]),
+            v,
+        ]
+        for x in values
+            y = XAMAuxData.unalias_value(aux.x, x)
+            @test y !== x
+            @test y == x
+        end
+        h = Hex(aux["EF"])
+        y = XAMAuxData.unalias_value(aux.x, h)
+        @test y.x !== h.x
+        @test y.x == h.x
+
+        aux = SAM.Auxiliary(collect(codeunits("AB:Z:abc")), 1)
+        x = aux["AB"]
+        @test XAMAuxData.unalias_value(aux.x, x) !== x
+
+        # Values that do not alias are not copied
+        for x in Any["abc", Int16[1, 2], UInt8[], 'a', 0x01, Hex([0x01])]
+            @test XAMAuxData.unalias_value(aux.x, x) === x
+        end
+    end
+
+    @testset "Values are not corrupted" begin
+        prefix = join(["P$i:i:$i" for i in 1:9], '\t')
+        # SAM: deleting AB moves CD, which the value of CD is a view into
+        aux = SAM.Auxiliary(collect(codeunits(prefix * "\tAB:Z:x\tCD:Z:hello world")), 1)
+        aux["AB"] = aux["CD"]
+        @test aux["AB"] == aux["CD"] == "hello world"
+
+        # BAM: Make sure growing does not reallocate, such that data is moved in-place
+        aux = BAM.Auxiliary(sizehint!(UInt8[], 1000), 1)
+        for i in 1:9
+            aux["P$i"] = Int32(i)
+        end
+        aux["AB"] = "x"
+        aux["CD"] = "hello world"
+        aux["EF"] = Int16[1, -2, 3]
+        aux["GH"] = UInt8[4, 5, 6, 7]
+        aux["AB"] = aux["CD"] # grow
+        @test aux["AB"] == aux["CD"] == "hello world"
+        aux["AB"] = aux["EF"] # shrink
+        @test aux["AB"] == aux["EF"] == [1, -2, 3]
+        aux["CD"] = aux["GH"] # shrink
+        @test aux["CD"] == aux["GH"] == [4, 5, 6, 7]
+        aux["P1"] = aux["CD"] # grow
+        @test aux["P1"] == [4, 5, 6, 7]
+
+        # Values may also alias the data before the start of the Auxiliary,
+        # which may be moved when the auxiliary is mutated
+        for T in (SAM.Auxiliary, BAM.Auxiliary)
+            v = collect(codeunits("a fairly long read name"))
+            n = length(v)
+            aux = T(v, n + 1)
+            aux["AB"] = Int32(1)
+            for i in Int32(1):Int32(20)
+                aux["X" * string(i % 10)] = i
+            end
+            aux["AB"] = StringView(MemoryView(v)[1:n])
+            @test aux["AB"] == "a fairly long read name"
+            @test String(v[1:n]) == "a fairly long read name"
+        end
+    end
+end
+
 @testset "Exception types" begin
     @test_throws(
         "Not enough bytes remaining in Aux data to encode a full field",

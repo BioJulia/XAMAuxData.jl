@@ -130,6 +130,30 @@ julia> aux["AX"] = [0x01, 0x02]; aux["AX"] # overwrite AX key
 
 Like `Dict`, the order of key/value pairs in auxiliaries is arbitrary and cannot be relied on.
 
+### Values may be views into the auxiliary
+To avoid allocations, some values loaded from an `Auxiliary` are views into its underlying data.
+This is the case for strings (type `Z`) in both formats, and for arrays (type `B`) in BAM.
+Mutating an `Auxiliary` may move or overwrite its data. Therefore, mutating an `Auxiliary`
+invalidates all values previously loaded from it, which may then silently contain wrong data.
+If you need to keep a value across a mutation, copy it first, e.g. with `String` or `collect`.
+
+```jldoctest
+julia> aux = SAM.Auxiliary(UInt8[], 1);
+
+julia> aux["AB"] = "abc"; aux["CD"] = "def";
+
+julia> cd = String(aux["CD"]); # copy, since we will mutate aux below
+
+julia> delete!(aux, "AB");
+
+julia> cd
+"def"
+```
+
+It is permitted to write a value loaded from an `Auxiliary` back into the same
+`Auxiliary`, as in `aux["AB"] = aux["CD"]`.
+In this case, the value is copied before the `Auxiliary` is mutated.
+
 ## More details about element type
 The SAM and BAM formats support only support a limited set of types, and the supported types differ between SAM and BAM.
 When writing a value to an `Auxiliary` object, this package will attempt to convert your value to one of the supported types.
