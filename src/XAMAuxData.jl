@@ -208,17 +208,20 @@ end
 function Base.length(aux::AbstractAuxiliary)::Int
     n = 0
     for val in iter_encodings(aux)
-        val isa Error && return n
+        val isa Error && throw(AuxException(val))
         n += 1
     end
     return n
 end
 
+# Like `get`, this throws if `aux` is malformed before `k` is found.
 function Base.haskey(aux::AbstractAuxiliary, k)::Bool
     key = convert(AuxTag, k)
-    return any(iter_encodings(aux)) do i
-        !(i isa Error) && first(i) == key
+    for i in iter_encodings(aux)
+        i isa Error && throw(AuxException(i))
+        first(i) == key && return true
     end
+    return false
 end
 
 function Base.keys(aux::AbstractAuxiliary)
