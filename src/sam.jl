@@ -6,7 +6,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
 import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
-import ..is_well_formed, ..BIT_INTEGERS
+import ..is_well_formed, ..BIT_INTEGERS, ..try_get
 
 public Auxiliary, AuxTag, Hex, Errors, Error
 
@@ -115,7 +115,7 @@ function Base.iterate(aux::Auxiliary, state::Int = 1)
 end
 
 function Base.get(aux::Auxiliary, k, default)
-    key = AuxTag(k)
+    key = convert(AuxTag, k)
     it = iter_encodings(aux)
     for i in it
         i isa Error && throw(AuxException(i))
@@ -125,6 +125,19 @@ function Base.get(aux::Auxiliary, k, default)
         end
     end
     return default
+end
+
+function try_get(aux::Auxiliary, k)
+    key = convert(AuxTag, k)
+    it = iter_encodings(aux)
+    for i in it
+        i isa Error && return i
+        (auxtag, typetag, span) = i
+        if auxtag == key
+            return load_auxvalue(typetag, @inbounds it.x.v[span])
+        end
+    end
+    return nothing
 end
 
 function Base.isvalid(aux::Auxiliary)
