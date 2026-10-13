@@ -3,9 +3,6 @@ module XAMAuxData
 using MemoryViews: MemoryViews, MemoryView, MutableMemoryView, ImmutableMemoryView, RefVector
 using StringViews: StringView
 
-struct Unsafe end
-const unsafe = Unsafe()
-
 export Hex, AuxTag, try_auxtag, try_get, SAM, BAM, is_well_formed, setindex_nonexisting!
 public Errors, Error
 
@@ -17,11 +14,18 @@ const BIT_INTEGERS = Union{UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, In
 include("auxtag.jl")
 
 """
-    Hex(v::AbstractVector{UInt8})
+    Hex(v::AbstractVector{UInt8}) <: AbstractVector{UInt8}
 
 Wrapper type around a byte vector. When this type is assigned to an Auxiliary,
 it is encoded as a hex value (type tag `H`) as opposed to a raw byte array (
 type tag `B`).
+Conversely, `H` values are loaded as `Hex{Memory{UInt8}}`, such that writing a
+loaded value back preserves its type.
+
+`Hex` is a minimal `AbstractVector{UInt8}`: it only implements `size`, `axes`
+and `getindex`, so most operations on it hit generic, potentially slow fallback
+methods. For anything performance sensitive, use `parent(hex)`, which is
+guaranteed to return the wrapped vector, i.e. a `V` for a `Hex{V}`.
 
 ```jldoctest
 julia> aux = SAM.Auxiliary(UInt8[], 1);
@@ -39,14 +43,15 @@ julia> String(MemoryView(aux))
 "ABHAEF86C\\0"
 ```
 """
-struct Hex{V <: AbstractVector{UInt8}}
+struct Hex{V <: AbstractVector{UInt8}} <: AbstractVector{UInt8}
     x::V
-
-    function Hex(v::AbstractVector{UInt8})
-        isempty(v) && error("Hex values cannot be empty according to SAM specs")
-        return new{typeof(v)}(v)
-    end
 end
+
+Base.parent(x::Hex) = x.x
+Base.size(x::Hex) = size(x.x)
+Base.axes(x::Hex) = axes(x.x)
+Base.IndexStyle(::Type{<:Hex}) = IndexLinear()
+Base.@propagate_inbounds Base.getindex(x::Hex, i::Int) = x.x[i]
 
 # Must encode to uppercase A-F
 hexencode_nibble(u::UInt8)::UInt8 = u < 0x0a ? UInt8('0') + u : UInt8('A') - 0x0a + u
@@ -139,7 +144,6 @@ end
 # Return a `MemoryView` containing all memory of `x`, or `nothing`
 memory_of(x::Union{StringView, SubString{<:StringView}}) = ImmutableMemoryView(x)
 memory_of(x::Union{Vector, Memory, MemoryView}) = ImmutableMemoryView(x)
-memory_of(x::Hex) = memory_of(x.x)
 
 # Note: The parent may contain more memory than `x` itself, so this may produce
 # false positives, which only cause a needless copy.
@@ -358,10 +362,8 @@ function iter_encodings end
 Base.IteratorSize(::Type{<:AbstractEncodedIterator}) = Base.SizeUnknown()
 Base.eltype(::Type{<:AbstractEncodedIterator}) = Union{Error, Tuple{AuxTag, UInt8, UnitRange{Int}}}
 
-function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
+function load_hex(mem::ImmutableMemoryView)::Union{Hex{Memory{UInt8}}, Error}
     len = length(mem)
-    # Note: According to specs, Hex can't be empty, but we load it anyway
-    # because we should be generous in what we accept
     isodd(len) && return Errors.InvalidHex
     reslen = div(len % UInt, 2) % Int
     hex = Memory{UInt8}(undef, reslen)
@@ -373,7 +375,7 @@ function load_hex(mem::ImmutableMemoryView)::Union{Memory{UInt8}, Error}
         bad |= bad_a | bad_b
         hex[i] = (a << 4) | b
     end
-    return bad ? Errors.InvalidHex : hex
+    return bad ? Errors.InvalidHex : Hex(hex)
 end
 
 """

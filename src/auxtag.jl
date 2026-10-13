@@ -35,9 +35,8 @@ ERROR: Invalid AuxTag. Tags must conform to r"^[A-Za-z][A-Za-z0-9]\$".
 struct AuxTag <: AbstractString
     x::Tuple{UInt8, UInt8}
 
-    function AuxTag(::Unsafe, x::UInt8, y::UInt8)
-        return new((x, y))
-    end
+    # Construct without validating the tag
+    global unsafe_auxtag(x::UInt8, y::UInt8) = new((x, y))
 end
 
 # AbstractString interface. Valid tags are ASCII, so each byte is one char.
@@ -89,7 +88,7 @@ true
 ```
 """
 function try_auxtag(a::UInt8, b::UInt8)::Union{Nothing, AuxTag}
-    return is_valid_auxtag(a, b) ? AuxTag(unsafe, a, b) : nothing
+    return is_valid_auxtag(a, b) ? unsafe_auxtag(a, b) : nothing
 end
 
 unsafe_u8(c::Char) = (reinterpret(UInt32, c) >> 24) % UInt8

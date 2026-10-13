@@ -4,7 +4,7 @@ module SAM
 
 import ..AuxTag, ..AbstractAuxiliary, ..is_printable_char, ..is_printable, ..Hex, ..setindex_nonexisting!
 import ..get_type_tag, ..Error, ..Errors, ..load_hex, ..validate_hex
-import ..try_auxtag, ..Unsafe, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
+import ..try_auxtag, ..as_sam_aux_value, ..AUX_NUMBER_TYPES, ..hexencode!
 import ..iter_encodings, ..AbstractEncodedIterator, ..AuxException, ..striptype
 import ..is_well_formed, ..BIT_INTEGERS, ..try_get, ..unalias_value, ..all_encodings, ..check_not_shrunk
 
