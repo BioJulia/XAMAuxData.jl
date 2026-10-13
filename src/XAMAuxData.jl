@@ -6,7 +6,7 @@ using StringViews: StringView
 struct Unsafe end
 const unsafe = Unsafe()
 
-export Hex, AuxTag, try_auxtag, SAM, BAM, is_well_formed, setindex_nonexisting!
+export Hex, AuxTag, try_auxtag, try_get, SAM, BAM, is_well_formed, setindex_nonexisting!
 public Errors, Error
 
 # These are the numerical types supported by the BAM format.
@@ -353,6 +353,42 @@ function is_well_formed(it::AbstractAuxiliary)
         !isa(i, Error)
     end
 end
+
+"""
+    try_get(
+        aux::AbstractAuxiliary,
+        key
+    )::Union{Nothing, XAMAuxData.Error, Any}
+
+Convert `key` to [`AuxTag`](@ref), then get the value associated with
+`key` in `aux`, without throwing on corrupt data.
+Return `nothing` if `key` is not present, and an [`XAMAuxData.Error`](@ref) if
+the value is invalid, or if `aux` is malformed before `key` is found.
+
+Unlike checking [`is_well_formed`](@ref) before indexing, this only scans the
+auxiliary data until `key` is found.
+Hence, if `key` is found, it is not checked whether data after `key` is malformed.
+
+# Examples
+```jldoctest
+julia> aux = SAM.Auxiliary("KM:i:252\tAB:Z:αβγδ\tAK::C");
+
+julia> try_get(aux, "KM")
+252
+
+julia> try_get(aux, "AB") # invalid value
+InvalidString::Error = 9
+
+julia> try_get(aux, "XX") # malformed before key is found
+NoColons::Error = 2
+
+julia> try_get(SAM.Auxiliary("KM:i:252"), "XX") === nothing # key not present
+true
+```
+
+See also: [`is_well_formed`](@ref)
+"""
+function try_get end
 
 """
     isvalid(aux::AbstractAuxiliary) -> Bool

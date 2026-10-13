@@ -1,6 +1,6 @@
 module XAMAuxDataTests
 
-using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, Errors, try_auxtag
+using XAMAuxData: XAMAuxData, SAM, BAM, AuxTag, Hex, Errors, try_auxtag, try_get
 using Test
 using MemoryViews: MemoryView
 using FormatSpecimens
@@ -665,6 +665,36 @@ end
         end
         @test Dict(cp) == d
     end
+end
+
+@testset "try_get" begin
+    # SAM
+    aux = SAM.Auxiliary("KM:i:252\tAB:Z:αβγδ\tAK::C\tXY:i:1")
+    @test try_get(aux, "KM") == 252
+    @test try_get(aux, AuxTag("KM")) == 252
+    @test aux[AuxTag("KM")] == 252
+    @test try_get(aux, "AB") == Errors.InvalidString
+    @test try_get(aux, "XY") == Errors.NoColons
+    @test try_get(aux, "QQ") == Errors.NoColons
+    @test try_get(SAM.Auxiliary("KM:i:252"), "QQ") === nothing
+    @test try_get(SAM.Auxiliary(""), "QQ") === nothing
+    @test try_get(SAM.Auxiliary("\t"), "QQ") == Errors.TooShortMemory
+    @test try_get(SAM.Auxiliary("11:i:1"), "QQ") == Errors.InvalidAuxTag
+
+    # BAM
+    aux = BAM.Auxiliary("KMC\x05ABAWXYW123")
+    @test try_get(aux, "KM") === 0x05
+    @test try_get(aux, "AB") === 'W'
+    @test try_get(aux, "XY") == Errors.InvalidTypeTag
+    @test try_get(aux, "QQ") == Errors.InvalidTypeTag
+    @test try_get(BAM.Auxiliary("KMC\x05"), "QQ") === nothing
+    @test try_get(BAM.Auxiliary("ABA\n"), "AB") == Errors.InvalidChar
+    @test try_get(BAM.Auxiliary("ABZabc"), "AB") == Errors.NoNullByte
+    @test try_get(BAM.Auxiliary("ABBW1234"), "AB") == Errors.InvalidArrayEltype
+    @test try_get(BAM.Auxiliary("AB"), "AB") == Errors.TooShortMemory
+
+    # Bad keys still throw
+    @test_throws Exception try_get(aux, "1A")
 end
 
 @testset "Exception types" begin

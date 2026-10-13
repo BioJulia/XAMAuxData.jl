@@ -4,7 +4,7 @@ import ..AuxTag, ..AbstractAuxiliary, ..Hex
 import ..AUX_NUMBER_TYPES, ..try_auxtag, ..Error, ..Errors
 import ..is_printable, ..load_hex, ..iter_encodings, ..AbstractEncodedIterator
 import ..is_printable_char, ..as_bam_aux_value, ..get_type_tag, ..hexencode!, ..AuxException
-import ..striptype, ..validate_hex, ..is_well_formed
+import ..striptype, ..validate_hex, ..is_well_formed, ..try_get
 
 public Auxiliary, AuxTag, Error, Errors
 
@@ -370,7 +370,7 @@ function write_auxvalue_typetag!(mem::MutableMemoryView{UInt8}, bam_val)
 end
 
 function Base.get(aux::Auxiliary, k, default)
-    key = AuxTag(k)
+    key = convert(AuxTag, k)
     it = iter_encodings(aux)
     for i in it
         i isa Error && throw(AuxException(i))
@@ -380,6 +380,19 @@ function Base.get(aux::Auxiliary, k, default)
         end
     end
     return default
+end
+
+function try_get(aux::Auxiliary, k)
+    key = convert(AuxTag, k)
+    it = iter_encodings(aux)
+    for i in it
+        i isa Error && return i
+        (auxtag, typetag, span) = i
+        if auxtag == key
+            return load_auxvalue(typetag, @inbounds it.mem[span])
+        end
+    end
+    return nothing
 end
 
 end # module
