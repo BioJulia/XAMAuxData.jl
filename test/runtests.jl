@@ -267,6 +267,10 @@ end
                     "e5",
                     "1.0e5.0",
                     "1e300",
+                    "-1e300",
+                    "3.5e38",
+                    "1e-50",
+                    "-0.0010e-60",
                 ]
                 aux = SAM.Auxiliary("AB:f:" * bad_data)
                 @test aux["AB"] == Errors.InvalidFloat
@@ -280,6 +284,10 @@ end
                     "12.25e2" => 1225.0f0,
                     "1E-2" => 0.01f0,
                     "-3e+1" => -30.0f0,
+                    "3.4028235e38" => floatmax(Float32),
+                    "1e-45" => nextfloat(0.0f0),
+                    "0e-50" => 0.0f0,
+                    "-0.00e999" => -0.0f0,
                 ]
                 aux = SAM.Auxiliary("AB:f:" * good_data)
                 @test aux["AB"] === x

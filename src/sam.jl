@@ -201,7 +201,23 @@ end
 function parse_number(::Type{Float32}, mem::ImmutableMemoryView{UInt8})::Union{Float32, Nothing}
     is_sam_float(mem) || return nothing
     # This may still return nothing, if the value is not representable as a Float32
-    return tryparse(Float32, StringView(mem))
+    x = tryparse(Float32, StringView(mem))
+    x === nothing && return nothing
+    # On Windows, Julia parses a Float64 and converts it to Float32, which does not
+    # detect overflow or underflow. Check for these here, so all platforms agree.
+    # Since `mem` is a SAM float, it can't be literal Inf, so non-finite means overflow.
+    isfinite(x) || return nothing
+    iszero(x) && has_nonzero_mantissa(mem) && return nothing
+    return x
+end
+
+# Check if the digits of `mem` before any exponent include a nonzero digit.
+function has_nonzero_mantissa(mem::ImmutableMemoryView{UInt8})::Bool
+    for b in mem
+        b in (UInt8('e'), UInt8('E')) && return false
+        b in UInt8('1'):UInt8('9') && return true
+    end
+    return false
 end
 
 # Check if `mem` matches the regex `[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?`

@@ -515,8 +515,16 @@ end
 function all_encodings(f, aux::AbstractAuxiliary, check_duplicates::Bool)::Bool
     it = iter_encodings(aux)
     if check_duplicates
+        # This code is kind of bonkers, but unfortunately necessary:
+        # We need to check for duplicate tags, but `all_encodings` must be fast
+        # since well-formedness validation happens often.
+        # The only way I can think of to do this fast in O(n) is with a
+        # bit set, but speed depends on it stack allocating.
+        # Several of the details here; RefVector, use of pointer in the tagging
+        # functions, and use of inline is to increase the chance of this stack
+        # allocation happening.  
         bitset = RefVector{UInt64}(undef, N_TAG_BITSET_WORDS)
-        fill!(bitset, zero(UInt64))
+        zero_tag_bitset!(bitset)
         for encoding in it
             encoding isa Error && return false
             add_to_tag_bitset!(bitset, first(encoding)) || return false
@@ -534,8 +542,22 @@ end
 # Map each valid tag to a distinct integer in 0:(59 * 75 - 1).
 # The first byte is a letter, and `& 0x3f` maps letters to distinct values in 1:58.
 # The second byte is in '0':'z', which subtracting '0' maps to 0:74.
-tag_bitset_index(tag::AuxTag) = Int(tag.x[1] & 0x3f) * 75 + Int(tag.x[2] - UInt8('0'))
+@inline function tag_bitset_index(tag::AuxTag)
+    Int(tag.x[1] & 0x3f) * 75 + Int(tag.x[2] - UInt8('0'))
+end
+
 const N_TAG_BITSET_WORDS = cld(59 * 75, 64)
+
+# Like `fill!(bitset, 0)`, but uses pointers for the same reason as `add_to_tag_bitset!`.
+@inline function zero_tag_bitset!(bitset::RefVector{UInt64})
+    GC.@preserve bitset begin
+        ptr = pointer(bitset)
+        for i in 1:N_TAG_BITSET_WORDS
+            unsafe_store!(ptr, zero(UInt64), i)
+        end
+    end
+    return bitset
+end
 
 # Add `tag` to the bitset, returning `false` if it was already present.
 # The bitset must not escape, since that prevents stack allocation. Therefore,
