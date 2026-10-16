@@ -129,7 +129,9 @@ function validate_encoding(type_tag::UInt8, mem::ImmutableMemoryView{UInt8})::Bo
     end
 end
 
-function Base.iterate(it::EncodedIterator, state::Int = 1)
+# Inlined, since on Julia 1.14 this is otherwise not inlined, and its return
+# value is then heap allocated on every iteration.
+@inline function Base.iterate(it::EncodedIterator, state::Int = 1)
     mem = it.mem
     state > length(mem) && return nothing
     state > length(mem) - 3 && return (Errors.TooShortMemory, length(mem) + 1)
