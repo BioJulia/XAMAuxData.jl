@@ -522,7 +522,7 @@ function all_encodings(f, aux::AbstractAuxiliary, check_duplicates::Bool)::Bool
         # bit set, but speed depends on it stack allocating.
         # Several of the details here; RefVector, use of pointer in the tagging
         # functions, and use of inline is to increase the chance of this stack
-        # allocation happening.  
+        # allocation happening.
         bitset = RefVector{UInt64}(undef, N_TAG_BITSET_WORDS)
         zero_tag_bitset!(bitset)
         for encoding in it
@@ -543,7 +543,7 @@ end
 # The first byte is a letter, and `& 0x3f` maps letters to distinct values in 1:58.
 # The second byte is in '0':'z', which subtracting '0' maps to 0:74.
 @inline function tag_bitset_index(tag::AuxTag)
-    Int(tag.x[1] & 0x3f) * 75 + Int(tag.x[2] - UInt8('0'))
+    return Int(tag.x[1] & 0x3f) * 75 + Int(tag.x[2] - UInt8('0'))
 end
 
 const N_TAG_BITSET_WORDS = cld(59 * 75, 64)

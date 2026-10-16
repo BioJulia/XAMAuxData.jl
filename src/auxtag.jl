@@ -3,10 +3,8 @@
     AuxTag(::Char, ::Char)
     AuxTag(::UInt8, ::UInt8)
 
-The type of a key of `Auxiliary`. This type is a lightweight two-character
+The type of a key of `Auxiliary`. This type is a lightweight two-bytes `isbits`
 `AbstractString`, and validates that the key is of appropriate format.
-Like other strings, it compares and hashes equal to strings with the same
-content, e.g. `isequal(AuxTag("AB"), "AB")`.
 `Auxiliary` can also be indexed using other strings as keys, which will be
 converted to `AuxTag`.
 
@@ -16,8 +14,8 @@ To construct an `AuxTag` of value "AB", you can use:
 * `AuxTag(UInt8('A'), UInt8('B'))`
 * `try_auxtag(UInt8('A'), UInt8('B'))`
 
-Throw an `AuxException` if the resulting AuxTag does not conform to the regex
-r"^[A-Za-z][A-Za-z0-9]\$".
+The `AuxTag` constructor throws an `AuxException` if the resulting AuxTag
+does not conform to the regex r"^[A-Za-z][A-Za-z0-9]\$".
 
 # Examples
 ```jldoctest

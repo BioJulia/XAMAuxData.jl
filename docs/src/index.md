@@ -189,24 +189,25 @@ Hence, the value written to an `Auxiliary` may not be the same value when being 
   are not permitted, in both SAM and BAM.
 
 ### Writing: SAM element types
-| Input type                                | SAM type stored |
-| ----------------------------------------- | --------------- |
-| `Int8`, `UInt8`, ..., `Int128`, `UInt128`* | `i`            |
-| `AbstractChar`✝                           | `A`             |
-| `Real`, except `Integer`‡                 | `f`             |
-| `AbstractString`§                         | `Z`             |
-| `AbstractVector{UInt8}`                   | `B:C`           |
-| `AbstractVector{Int8}`                    | `B:c`           |
-| `AbstractVector{UInt16}`                  | `B:S`           |
-| `AbstractVector{Int16}`                   | `B:s`           |
-| `AbstractVector{UInt32}`                  | `B:I`           |
-| `AbstractVector{Int32}`                   | `B:i`           |
-| `AbstractVector{<:Real}`, except integers‡ | `B:f`          |
-| `Hex`                                     | `H`             |
+| Input type                                 | SAM type stored |
+| ------------------------------------------ | --------------- |
+| `Int8`, `UInt8`, ..., `Int128`, `UInt128`* | `i`             |
+| `AbstractChar`✝                            | `A`             |
+| `Real`, except `Integer`‡                  | `f`             |
+| `AbstractString`§                          | `Z`             |
+| `AbstractVector{UInt8}`                    | `B:C`           |
+| `AbstractVector{Int8}`                     | `B:c`           |
+| `AbstractVector{UInt16}`                   | `B:S`           |
+| `AbstractVector{Int16}`                    | `B:s`           |
+| `AbstractVector{UInt32}`                   | `B:I`           |
+| `AbstractVector{Int32}`                    | `B:i`           |
+| `AbstractVector{<:Real}`, except integers‡ | `B:f`           |
+| `Hex`                                      | `H`             |
 
 - `*` Only values in the range `[-2^31, 2^32)` are allowed.
   The SAM specs do not limit the size of integers, but this is the range that
-  can be represented in BAM, and therefore the realistic range of SAM integers.
+  can be represented in BAM, and therefore allowing values outside this range
+  would break SAM-to-BAM conversion.
   Other integer types, such as `Bool` and `BigInt`, cannot be written.
 - ✝ Permitted `Char` values are only those in `'!':'~'`.
 - ‡ These are converted to `Float32`. NaN, infinite values, and values too large to be
@@ -306,10 +307,14 @@ julia> parent(aux["AB"])
 Calling `MemoryView` on an `Auxiliary` returns the exact bytes the `Auxiliary` reads from.
 Therefore, the data is valid SAM/BAM auxiliary data if and only if the `Auxiliary` is valid,
 as checked by [`isvalid`](@ref Base.isvalid(::XAMAuxData.AbstractAuxiliary)).
-Writing to a mutable `Auxiliary` never makes it invalid, since writing invalid keys or values
-throws an [`AuxException`](@ref) - with the exception of [`setindex_nonexisting!`](@ref)
-with a key already present in the `Auxiliary`.
-Hence, an `Auxiliary` created empty and only written to always produces valid data:
+Writing invalid keys or values to a mutable `Auxiliary` throws an exception, typically an
+[`AuxException`](@ref). If a write to a valid `Auxiliary` does not throw, the `Auxiliary` remains valid,
+with the exception of [`setindex_nonexisting!`](@ref) with a key already present in the `Auxiliary`
+(which is invalid usage).
+This assumes the written values correctly implement their interfaces, e.g. that the length of
+an `AbstractVector` agrees with its iteration.
+If a write throws, the `Auxiliary` may have been modified, and may be invalid.
+Hence, an `Auxiliary` created empty and only written to without throwing always produces valid data:
 
 ```jldoctest
 using MemoryViews
