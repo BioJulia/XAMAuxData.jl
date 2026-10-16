@@ -11,7 +11,7 @@ DocMeta.setdocmeta!(XAMAuxData, :DocTestSetup, meta; recursive = true)
 makedocs(;
     sitename = "XAMAuxData.jl",
     modules = [XAMAuxData],
-    pages = ["Home" => "index.md", "Reference" => "reference.md"],
+    pages = ["Home" => "index.md", "Reference" => "reference.md", "Migrating to 0.2" => "migration.md"],
     authors = "Jakob Nybo Nissen",
     checkdocs = :public,
     remotes = nothing,
